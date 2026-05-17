@@ -77,7 +77,6 @@ export default function LoginPage() {
       <br />
 
       <button onClick={login}>Iniciar sesión</button>
-      <button onClick={signup}>Crear usuario</button>
     </main>
   );
 }

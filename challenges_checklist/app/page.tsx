@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import ChallengeChecklist from "./components/ChallengeChecklist";
 
 export default async function Page() {
   const cookieStore = await cookies();
@@ -16,7 +17,8 @@ export default async function Page() {
 
   const { data: challenges, error } = await supabase
     .from("challenges")
-    .select("*");
+    .select("*")
+    .order("created_at", { ascending: true });
 
   return (
     <main style={{ padding: 40 }}>
@@ -24,7 +26,7 @@ export default async function Page() {
 
       {error && <pre>{JSON.stringify(error, null, 2)}</pre>}
 
-      <pre>{JSON.stringify(challenges, null, 2)}</pre>
+      <ChallengeChecklist initialChallenges={challenges || []} />
     </main>
   );
 }
