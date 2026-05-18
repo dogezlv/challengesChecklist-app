@@ -8,7 +8,7 @@ type Challenge = {
   description: string;
   is_completed: boolean;
   created_at: string;
-  type: number;
+  kind: 'simple' | 'progress';
   current_value: number | null;
   target_value: number | null;
   line_id: string | null;
@@ -44,12 +44,9 @@ export default function ChallengeChecklist({
       )
     );
 
-    const { error } = await supabase
-      .from("challenges")
-      .update({
-        is_completed: !challenge.is_completed,
-      })
-      .eq("id", challenge.id);
+    const { error } = await supabase.rpc("toggle_challenge_completion", {
+      p_challenge_id: challenge.id,
+    });
 
     if (error) {
       console.error(error);
@@ -58,7 +55,7 @@ export default function ChallengeChecklist({
   }
 
   async function increaseProgress(challenge: Challenge, amount: number) {
-    const { error } = await supabase.rpc("increase_current_state", {
+    const { error } = await supabase.rpc("increase_challenge_progress", {
       p_challenge_id: challenge.id,
       p_increase_value: amount,
     });
@@ -71,6 +68,19 @@ export default function ChallengeChecklist({
     loadChallenges();
   }
 
+  async function setProgress(challenge: Challenge, newValue: number) {
+    const { error } = await supabase.rpc("update_challenge_progress", {
+      p_challenge_id: challenge.id,
+      p_current_value: newValue,
+    });
+
+    if (error) {
+      console.error(error);
+      return;
+    }
+
+    loadChallenges();
+  }
   useEffect(() => {
     const channel = supabase
       .channel("challenges-realtime")
@@ -113,13 +123,14 @@ export default function ChallengeChecklist({
           >
             <h2>{challenge.description}</h2>
 
-            {challenge.type === 0 && (
+            {challenge.kind === 'simple' && (
               <>
+              {/* 
                 <p>
                   Estado:{" "}
                   {challenge.is_completed ? "Completado" : "Pendiente"}
                 </p>
-
+              */}
                 <button onClick={() => toggleSimpleChallenge(challenge)}>
                   {challenge.is_completed
                     ? "Marcar como pendiente"
@@ -128,7 +139,7 @@ export default function ChallengeChecklist({
               </>
             )}
 
-            {challenge.type === 1 && (
+            {challenge.kind === 'progress' && (
               <>
                 <p>
                   Progreso: {current} / {target}
@@ -142,7 +153,6 @@ export default function ChallengeChecklist({
                   value={current}
                   onChange={(e) => {
                     const newValue = Number(e.target.value);
-
                     setChallenges((prev) =>
                       prev.map((c) =>
                         c.id === challenge.id
@@ -157,33 +167,11 @@ export default function ChallengeChecklist({
                   }}
                   onMouseUp={async (e) => {
                     const newValue = Number(e.currentTarget.value);
-
-                    const { error } = await supabase
-                      .from("challenges")
-                      .update({
-                        current_value: newValue,
-                      })
-                      .eq("id", challenge.id);
-
-                    if (error) {
-                      console.error(error);
-                      loadChallenges();
-                    }
+                    setProgress(challenge, newValue);
                   }}
                   onTouchEnd={async (e) => {
                     const newValue = Number(e.currentTarget.value);
-
-                    const { error } = await supabase
-                      .from("challenges")
-                      .update({
-                        current_value: newValue,
-                      })
-                      .eq("id", challenge.id);
-
-                    if (error) {
-                      console.error(error);
-                      loadChallenges();
-                    }
+                    setProgress(challenge, newValue);
                   }}
                   style={{ 
                     width: "100%",
@@ -218,10 +206,11 @@ export default function ChallengeChecklist({
                     Aumentar
                   </button>
                 </div>
-
+                {/* 
                 <p>
                   Estado: {challenge.is_completed ? "Completado" : "Pendiente"}
                 </p>
+                */}
               </>
             )}
           </div>
