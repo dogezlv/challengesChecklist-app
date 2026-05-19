@@ -15,6 +15,150 @@ type Challenge = Row & {
   kind?: "simple" | "progress";
 };
 
+type GameObject = Row & {
+  game_object_tags?: {
+    tag_id: string;
+  }[];
+};
+
+function ObjectTagEditor({
+  gameObjects,
+  tags,
+  input,
+  button,
+  setMessage,
+}: any) {
+  const supabase = createClient();
+
+  const [selectedObjectId, setSelectedObjectId] =
+    useState("");
+
+  const selectedObject = gameObjects.find(
+    (o: any) => o.id === selectedObjectId
+  );
+
+  async function updateObjectTags(formData: FormData) {
+    if (!selectedObject) return;
+
+    const selectedTags = formData
+      .getAll("tag_ids")
+      .map(String);
+
+    const { error: deleteError } = await supabase
+      .from("game_object_tags")
+      .delete()
+      .eq("object_id", selectedObject.id);
+
+    if (deleteError) {
+      setMessage(deleteError.message);
+      return;
+    }
+
+    if (selectedTags.length > 0) {
+      const rows = selectedTags.map((tag_id) => ({
+        object_id: selectedObject.id,
+        tag_id,
+      }));
+
+      const { error: insertError } = await supabase
+        .from("game_object_tags")
+        .insert(rows);
+
+      if (insertError) {
+        setMessage(insertError.message);
+        return;
+      }
+    }
+
+    setMessage("Tags actualizados.");
+    location.reload();
+  }
+
+  const currentTags =
+    selectedObject?.game_object_tags?.map(
+      (t: any) => t.tag_id
+    ) ?? [];
+
+  return (
+    <div
+      style={{
+        display: "grid",
+        gap: 16,
+      }}
+    >
+      <select
+        value={selectedObjectId}
+        onChange={(e) =>
+          setSelectedObjectId(e.target.value)
+        }
+        style={input}
+      >
+        <option value="">
+          Seleccionar objeto
+        </option>
+
+        {gameObjects.map((object: any) => (
+          <option
+            key={object.id}
+            value={object.id}
+          >
+            {object.display_name}
+          </option>
+        ))}
+      </select>
+
+      {selectedObject && (
+        <form
+          action={updateObjectTags}
+          style={{
+            display: "grid",
+            gap: 12,
+          }}
+        >
+          <div>
+            <strong>
+              {selectedObject.display_name}
+            </strong>
+
+            <div
+              style={{
+                fontSize: 12,
+                color: "#9ca3af",
+              }}
+            >
+              {selectedObject.code}
+            </div>
+          </div>
+
+          <select
+            key={selectedObject.id}
+            name="tag_ids"
+            multiple
+            defaultValue={currentTags}
+            style={{
+              ...input,
+              height: 200,
+            }}
+          >
+            {tags.map((tag: any) => (
+              <option
+                key={tag.id}
+                value={tag.id}
+              >
+                {tag.display_name}
+              </option>
+            ))}
+          </select>
+
+          <button style={button}>
+            Guardar tags
+          </button>
+        </form>
+      )}
+    </div>
+  );
+}
+
 export default function AdminPanel({
   actionTypes,
   tags,
@@ -25,7 +169,7 @@ export default function AdminPanel({
 }: {
   actionTypes: Row[];
   tags: Row[];
-  gameObjects: Row[];
+  gameObjects: GameObject[];
   locations: Row[];
   challenges: Challenge[];
   challengeLines: Row[];
@@ -134,6 +278,43 @@ export default function AdminPanel({
     if (error) setMessage(error.message);
     else location.reload();
   }
+  async function updateObjectTags(
+    objectId: string,
+    formData: FormData
+  ) {
+    const selectedTags = formData
+      .getAll("tag_ids")
+      .map(String);
+
+    const { error: deleteError } = await supabase
+      .from("game_object_tags")
+      .delete()
+      .eq("object_id", objectId);
+
+    if (deleteError) {
+      setMessage(deleteError.message);
+      return;
+    }
+
+    if (selectedTags.length > 0) {
+      const rows = selectedTags.map((tag_id) => ({
+        object_id: objectId,
+        tag_id,
+      }));
+
+      const { error: insertError } = await supabase
+        .from("game_object_tags")
+        .insert(rows);
+
+      if (insertError) {
+        setMessage(insertError.message);
+        return;
+      }
+    }
+
+  setMessage("Tags actualizados.");
+  location.reload();
+}
 
   const card: React.CSSProperties = {
     background: "#111827",
@@ -356,6 +537,18 @@ export default function AdminPanel({
 
             <button style={button}>Crear objeto con tags</button>
           </form>
+        </section>
+
+        <section style={card}>
+          <h2>Modificar tags de objetos</h2>
+
+          <ObjectTagEditor
+            gameObjects={gameObjects}
+            tags={tags}
+            input={input}
+            button={button}
+            setMessage={setMessage}
+          />
         </section>
 
         <section style={card}>

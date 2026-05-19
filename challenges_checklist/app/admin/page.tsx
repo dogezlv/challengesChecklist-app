@@ -20,22 +20,30 @@ export default async function AdminPage() {
     .maybeSingle();
 
   if (!adminRow) redirect("/");
-
+  
   const [
     actionTypes,
     tags,
-    gameObjects,
     locations,
     challenges,
     challengeLines,
   ] = await Promise.all([
     supabase.from("action_types").select("*").order("display_name"),
     supabase.from("tags").select("*").order("display_name"),
-    supabase.from("game_objects").select("*").order("display_name"),
     supabase.from("locations").select("*").order("display_name"),
     supabase.from("challenges").select("*").order("created_at"),
     supabase.from("challenge_lines").select("*").order("created_at"),
   ]);
+
+  const gameObjects = await supabase
+  .from("game_objects")
+  .select(`
+    *,
+    game_object_tags (
+      tag_id
+    )
+  `)
+  .order("display_name");
 
   return (
     <AdminPanel
