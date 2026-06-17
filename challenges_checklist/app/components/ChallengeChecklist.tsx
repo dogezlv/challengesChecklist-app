@@ -1,96 +1,76 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
+import MissionCard from "./MissionCard";
+import SearchBox from "./SearchBox";
+import WeekTabs from "./WeekTabs";
+import type { Season, Week } from "../lib/selection";
+import {
+  SCOPE_LABEL,
+  computeLockedIds,
+  normalizeText,
+  sortWeekChallenges,
+  type Challenge,
+  type LineRow,
+} from "../lib/types";
 
-type Challenge = {
-  id: string;
-  description: string;
-  is_completed: boolean;
-  created_at: string;
-  kind: 'simple' | 'progress';
-  current_value: number | null;
-  target_value: number | null;
-  line_id: string | null;
-  phase_order: number | null;
-};
-
+// Vista pública de solo lectura: recibe TODA la temporada de una vez y cambia
+// de semana en el cliente (sin ida al servidor). Se actualiza en vivo vía
+// Realtime cuando el panel de supervisión o la BD cambian algo.
+// Las fases futuras de una línea se ocultan hasta completar la anterior.
 export default function ChallengeChecklist({
   initialChallenges,
+  lines,
+  seasons,
+  weeks,
+  seasonCode,
+  initialWeekNumber,
 }: {
   initialChallenges: Challenge[];
+  lines: LineRow[];
+  seasons: Season[];
+  weeks: Week[];
+  seasonCode: string;
+  initialWeekNumber: number;
 }) {
   const supabase = createClient();
-  const [customAmounts, setCustomAmounts] = useState<Record<string, number>>({});
+  const router = useRouter();
   const [challenges, setChallenges] = useState(initialChallenges);
+  const [weekTab, setWeekTab] = useState(initialWeekNumber);
+  const [showAll, setShowAll] = useState(false);
+  const [search, setSearch] = useState("");
 
-  async function loadChallenges() {
-    const { data, error } = await supabase
-      .from("challenges")
-      .select("*")
-      .order("created_at", { ascending: true });
-
-    if (!error && data) {
-      setChallenges(data);
-    }
+  // re-sincroniza cuando el servidor manda otra temporada (ajuste de estado
+  // durante el render comparando la prop anterior, sin efecto)
+  const [prevInitial, setPrevInitial] = useState(initialChallenges);
+  if (prevInitial !== initialChallenges) {
+    setPrevInitial(initialChallenges);
+    setChallenges(initialChallenges);
   }
 
-  async function toggleSimpleChallenge(challenge: Challenge) {
-    setChallenges((prev) =>
-      prev.map((c) =>
-        c.id === challenge.id
-          ? { ...c, is_completed: !c.is_completed }
-          : c
-      )
-    );
+  const weekIds = useMemo(() => weeks.map((w) => w.id), [weeks]);
 
-    const { error } = await supabase.rpc("toggle_challenge_completion", {
-      p_challenge_id: challenge.id,
-    });
-
-    if (error) {
-      console.error(error);
-      loadChallenges();
-    }
-  }
-
-  async function increaseProgress(challenge: Challenge, amount: number) {
-    const { error } = await supabase.rpc("increase_challenge_progress", {
-      p_challenge_id: challenge.id,
-      p_increase_value: amount,
-    });
-
-    if (error) {
-      console.error(error);
-      return;
-    }
-
-    loadChallenges();
-  }
-
-  async function setProgress(challenge: Challenge, newValue: number) {
-    const { error } = await supabase.rpc("update_challenge_progress", {
-      p_challenge_id: challenge.id,
-      p_current_value: newValue,
-    });
-
-    if (error) {
-      console.error(error);
-      return;
-    }
-
-    loadChallenges();
-  }
   useEffect(() => {
+    async function loadChallenges() {
+      if (!weekIds.length) return;
+      const { data, error } = await supabase
+        .from("challenges")
+        .select("*")
+        .in("week_id", weekIds)
+        .order("created_at", { ascending: true });
+
+      if (!error && data) {
+        setChallenges(data);
+      }
+    }
+
     const channel = supabase
       .channel("challenges-realtime")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "challenges",
-        },
+        { event: "*", schema: "public", table: "challenges" },
         () => {
           loadChallenges();
         }
@@ -100,122 +80,124 @@ export default function ChallengeChecklist({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, []);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [weekIds.join(",")]);
+
+  const lockedIds = useMemo(() => computeLockedIds(challenges), [challenges]);
+  const query = normalizeText(search.trim());
+
+  function lineName(lineId: string | null) {
+    if (!lineId) return null;
+    const name = lines.find((l) => l.id === lineId)?.name;
+    if (!name) return null;
+    return name.split(" — ")[1] ?? name;
+  }
+
+  // en el checklist las fases bloqueadas no se muestran: aparecen al
+  // completar la fase anterior, ocupando el mismo lugar de su línea
+  function visibleWeekChallenges(week: Week) {
+    return sortWeekChallenges(
+      challenges.filter((c) => c.week_id === week.id && !c.is_meta)
+    ).filter(
+      (c) =>
+        !lockedIds.has(c.id) &&
+        (!query || normalizeText(c.description).includes(query))
+    );
+  }
+
+  function weekMetaCard(week: Week) {
+    const meta = challenges.find((c) => c.week_id === week.id && c.is_meta);
+    if (!meta) return null;
+    if (query && !normalizeText(meta.description).includes(query)) return null;
+    return (
+      <MissionCard
+        title={`Semana ${week.week_number} · Recompensa automática`}
+        quest={meta.description}
+        current={meta.current_value ?? 0}
+        target={meta.target_value ?? 7}
+        completed={meta.is_completed}
+        meta
+      />
+    );
+  }
+
+  const tabWeek = weeks.find((w) => w.week_number === weekTab) ?? weeks[0];
+  const viewWeeks = showAll ? weeks : tabWeek ? [tabWeek] : [];
 
   return (
-    <div style={{ display: "grid", gap: 12 }}>
-      {challenges.map((challenge) => {
-        const current = challenge.current_value ?? 0;
-        const target = challenge.target_value ?? 0;
-        const percent =
-          target > 0 ? Math.min((current / target) * 100, 100) : 0;
+    <div style={{ display: "grid", gap: 14 }}>
+      <WeekTabs
+        seasons={seasons}
+        weeks={weeks}
+        seasonCode={seasonCode}
+        weekNumber={weekTab}
+        allSelected={showAll}
+        onSelectAll={() => setShowAll(true)}
+        onSelectSeason={(code) => router.push(`/?season=${code}&week=1`)}
+        onSelectWeek={(n) => {
+          setShowAll(false);
+          setWeekTab(n);
+          window.history.replaceState(null, "", `/?season=${seasonCode}&week=${n}`);
+        }}
+      />
+
+      <SearchBox
+        value={search}
+        onChange={setSearch}
+        placeholder={
+          showAll
+            ? "Buscar en todas las semanas…"
+            : `Buscar en la semana ${tabWeek?.week_number ?? ""}…`
+        }
+      />
+
+      {viewWeeks.map((week) => {
+        const items = visibleWeekChallenges(week);
+        const metaCard = weekMetaCard(week);
+        if (showAll && items.length === 0 && !metaCard) return null;
 
         return (
-          <div
-            key={challenge.id}
-            style={{
-              border: "1px solid #444",
-              borderRadius: 12,
-              padding: 16,
-              background: challenge.is_completed ? "#113d22" : "#1f1f1f",
-              color: "white",
-            }}
-          >
-            <h2>{challenge.description}</h2>
-
-            {challenge.kind === 'simple' && (
-              <>
-              {/* 
-                <p>
-                  Estado:{" "}
-                  {challenge.is_completed ? "Completado" : "Pendiente"}
-                </p>
-              */}
-                <button onClick={() => toggleSimpleChallenge(challenge)}>
-                  {challenge.is_completed
-                    ? "Marcar como pendiente"
-                    : "Completar"}
-                </button>
-              </>
+          <div key={week.id} style={{ display: "grid", gap: 10 }}>
+            {showAll && (
+              <h2
+                style={{
+                  color: "#7ccafa",
+                  margin: "8px 0 0",
+                  fontSize: 16,
+                  textTransform: "uppercase",
+                  letterSpacing: 1,
+                  fontWeight: 900,
+                }}
+              >
+                {week.display_name ?? `Semana ${week.week_number}`}
+              </h2>
             )}
 
-            {challenge.kind === 'progress' && (
-              <>
-                <p>
-                  Progreso: {current} / {target}
-                </p>
+            {metaCard}
 
-                <input
-                  type="range"
-                  min={0}
-                  max={target}
-                  //disabled={challenge.is_completed}
-                  value={current}
-                  onChange={(e) => {
-                    const newValue = Number(e.target.value);
-                    setChallenges((prev) =>
-                      prev.map((c) =>
-                        c.id === challenge.id
-                          ? {
-                              ...c,
-                              current_value: newValue,
-                              is_completed: target > 0 && newValue >= target,
-                            }
-                          : c
-                      )
-                    );
-                  }}
-                  onMouseUp={async (e) => {
-                    const newValue = Number(e.currentTarget.value);
-                    setProgress(challenge, newValue);
-                  }}
-                  onTouchEnd={async (e) => {
-                    const newValue = Number(e.currentTarget.value);
-                    setProgress(challenge, newValue);
-                  }}
-                  style={{ 
-                    width: "100%",
-                     accentColor: challenge.is_completed
-                        ? "#22c55e"
-                        : "#3b82f6",
-                   }}
+            {items.map((challenge) => {
+              const line = lineName(challenge.line_id);
+              return (
+                <MissionCard
+                  key={challenge.id}
+                  title={`${SCOPE_LABEL[challenge.match_scope]}${line ? ` · ${line}` : ""}`}
+                  quest={challenge.description}
+                  current={challenge.current_value ?? 0}
+                  target={challenge.target_value ?? 1}
+                  completed={challenge.is_completed}
                 />
-                <div style={{ display: "flex", gap: 8 }}>
-                  <input
-                    type="number"
-                    placeholder="Cantidad"
-                    value={customAmounts[challenge.id] ?? ""}
-                    onChange={(e) =>
-                      setCustomAmounts((prev) => ({
-                        ...prev,
-                        [challenge.id]: Number(e.target.value),
-                      }))
-                    }
-                    style={{ padding: 6 }}
-                  />
-
-                  <button
-                    disabled={challenge.is_completed}
-                    onClick={() =>
-                      increaseProgress(
-                        challenge,
-                        customAmounts[challenge.id] || 0
-                      )
-                    }
-                  >
-                    Aumentar
-                  </button>
-                </div>
-                {/* 
-                <p>
-                  Estado: {challenge.is_completed ? "Completado" : "Pendiente"}
-                </p>
-                */}
-              </>
-            )}
+              );
+            })}
           </div>
         );
       })}
+
+      {query &&
+        viewWeeks.every((w) => visibleWeekChallenges(w).length === 0 && !weekMetaCard(w)) && (
+          <p style={{ color: "#9fc9f5", margin: 0 }}>
+            Ningún desafío coincide con &quot;{search}&quot;.
+          </p>
+        )}
     </div>
   );
 }

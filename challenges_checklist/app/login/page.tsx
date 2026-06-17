@@ -32,27 +32,6 @@ export default function LoginPage() {
     router.refresh();
   }
 
-  async function signup() {
-    const email = usernameToEmail(username);
-
-    const { error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: {
-          username,
-        },
-      },
-    });
-
-    if (error) {
-      alert(error.message);
-      return;
-    }
-
-    alert("Usuario creado. Ahora inicia sesión.");
-  }
-
   return (
     <main style={{ padding: 40 }}>
       <h1>Login</h1>

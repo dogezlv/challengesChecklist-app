@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
+import LogoutButton from "../components/LogoutButton";
 
 type Row = {
   id: string;
@@ -27,14 +29,20 @@ function ObjectTagEditor({
   input,
   button,
   setMessage,
-}: any) {
+}: {
+  gameObjects: GameObject[];
+  tags: Row[];
+  input: React.CSSProperties;
+  button: React.CSSProperties;
+  setMessage: (message: string) => void;
+}) {
   const supabase = createClient();
 
   const [selectedObjectId, setSelectedObjectId] =
     useState("");
 
   const selectedObject = gameObjects.find(
-    (o: any) => o.id === selectedObjectId
+    (o) => o.id === selectedObjectId
   );
 
   async function updateObjectTags(formData: FormData) {
@@ -76,7 +84,7 @@ function ObjectTagEditor({
 
   const currentTags =
     selectedObject?.game_object_tags?.map(
-      (t: any) => t.tag_id
+      (t) => t.tag_id
     ) ?? [];
 
   return (
@@ -97,7 +105,7 @@ function ObjectTagEditor({
           Seleccionar objeto
         </option>
 
-        {gameObjects.map((object: any) => (
+        {gameObjects.map((object) => (
           <option
             key={object.id}
             value={object.id}
@@ -140,7 +148,7 @@ function ObjectTagEditor({
               height: 200,
             }}
           >
-            {tags.map((tag: any) => (
+            {tags.map((tag) => (
               <option
                 key={tag.id}
                 value={tag.id}
@@ -178,6 +186,25 @@ export default function AdminPanel({
   const [message, setMessage] = useState("");
   const [challengeKind, setChallengeKind] =
   useState<"simple" | "progress">("simple");
+
+  async function registerUser(formData: FormData) {
+    const res = await fetch("/api/admin/create-user", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        username: String(formData.get("username")),
+        password: String(formData.get("password")),
+        isAdmin: formData.get("is_admin") === "on",
+      }),
+    });
+
+    const data = await res.json();
+    setMessage(
+      res.ok
+        ? `Usuario "${data.username}" creado${data.isAdmin ? " (admin)" : ""}.`
+        : data.error
+    );
+  }
   async function createChallengeLine() {
     const { error } = await supabase.from("challenge_lines").insert({});
 
@@ -278,44 +305,6 @@ export default function AdminPanel({
     if (error) setMessage(error.message);
     else location.reload();
   }
-  async function updateObjectTags(
-    objectId: string,
-    formData: FormData
-  ) {
-    const selectedTags = formData
-      .getAll("tag_ids")
-      .map(String);
-
-    const { error: deleteError } = await supabase
-      .from("game_object_tags")
-      .delete()
-      .eq("object_id", objectId);
-
-    if (deleteError) {
-      setMessage(deleteError.message);
-      return;
-    }
-
-    if (selectedTags.length > 0) {
-      const rows = selectedTags.map((tag_id) => ({
-        object_id: objectId,
-        tag_id,
-      }));
-
-      const { error: insertError } = await supabase
-        .from("game_object_tags")
-        .insert(rows);
-
-      if (insertError) {
-        setMessage(insertError.message);
-        return;
-      }
-    }
-
-  setMessage("Tags actualizados.");
-  location.reload();
-}
-
   const card: React.CSSProperties = {
     background: "#111827",
     border: "1px solid #374151",
@@ -355,7 +344,26 @@ export default function AdminPanel({
 
   return (
     <main style={{ minHeight: "100vh", background: "#020617", padding: 40 }}>
-      <h1 style={{ color: "white", fontSize: 36 }}>Panel Admin</h1>
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 12,
+        }}
+      >
+        <h1 style={{ color: "white", fontSize: 36, margin: 0 }}>Panel Admin</h1>
+        <nav style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          <Link href="/" style={{ color: "#60a5fa", fontWeight: 700 }}>
+            Checklist
+          </Link>
+          <Link href="/tracker" style={{ color: "#60a5fa", fontWeight: 700 }}>
+            Panel de supervisión
+          </Link>
+          <LogoutButton />
+        </nav>
+      </header>
 
       {message && (
         <p style={{ background: "#7f1d1d", color: "white", padding: 12 }}>
@@ -364,6 +372,36 @@ export default function AdminPanel({
       )}
 
       <div style={grid}>
+        <section style={card}>
+          <h2>Registrar usuario</h2>
+
+          <form action={registerUser} style={form}>
+            <input
+              name="username"
+              placeholder="Nombre de usuario"
+              required
+              minLength={3}
+              maxLength={32}
+              pattern="[a-zA-Z0-9._\-]+"
+              title="Letras, números, punto, guion y guion bajo"
+              style={input}
+            />
+            <input
+              name="password"
+              type="password"
+              placeholder="Contraseña (mínimo 6 caracteres)"
+              required
+              minLength={6}
+              style={input}
+            />
+            <label style={{ color: "#d1d5db", display: "flex", gap: 8, alignItems: "center" }}>
+              <input name="is_admin" type="checkbox" />
+              Hacerlo administrador
+            </label>
+            <button style={button}>Crear usuario</button>
+          </form>
+        </section>
+
         <section style={card}>
           <h2>Crear challenge</h2>
 
