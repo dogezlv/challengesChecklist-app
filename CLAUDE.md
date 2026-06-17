@@ -1,0 +1,92 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project layout
+
+The actual app lives in the `challenges_checklist/` subdirectory — the repo root only holds this file and a README. **Run all commands from `challenges_checklist/`.**
+
+## Commands
+
+```bash
+cd challenges_checklist
+npm run dev      # dev server (Turbopack)
+npm run build    # production build — also the main type/correctness check
+npm run lint     # eslint
+```
+
+There is no test suite.
+
+## Next.js 16 warning
+
+This project uses **Next.js 16**, which has breaking changes versus what you may know from training data (see `challenges_checklist/AGENTS.md`). Before writing Next.js-specific code, consult the bundled docs at `challenges_checklist/node_modules/next/dist/docs/`. Note `cookies()` from `next/headers` is async and must be awaited.
+
+## What this app is
+
+A Fortnite-style challenges checklist: users mark challenges complete or track numeric progress; an admin panel manages the underlying data. UI text is in Spanish. Stack: Next.js 16 App Router, React 19, Tailwind 4, Supabase (Postgres + Auth + Realtime), TypeScript with `@/*` path alias mapping to the `challenges_checklist/` root.
+
+## Architecture
+
+All data lives in Supabase; there is no local database or ORM. Client components talk to Supabase directly (no API layer for data), using the clients in `utils/supabase/`:
+
+- `utils/supabase/server.ts` — `createClient(cookieStore)` for Server Components; callers must pass `await cookies()`.
+- `utils/supabase/client.ts` — browser client for `"use client"` components.
+- `utils/supabase/middleware.ts` — session-refresh helper, currently **not wired up** (there is no root `middleware.ts`).
+
+Env vars in `challenges_checklist/.env.local`: `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY`, `SUPABASE_SERVICE_ROLE_KEY` (used only by the legacy login route), and `SUPABASE_ACCESS_TOKEN` (personal access token, not used by the app).
+
+Direct DB access for development: the service role key works against the REST API (`https://<project>.supabase.co/rest/v1/...`, bypasses RLS), and the access token allows arbitrary SQL including DDL via the Management API: `POST https://api.supabase.com/v1/projects/ucjuxngjmcdwggishima/database/query` with body `{"query": "..."}`. Schema changes (tables, RPCs, RLS policies) can therefore be made directly from here.
+
+### Auth
+
+Two systems coexist:
+
+1. **Supabase Auth (current)** — `app/login/page.tsx` maps a username to a fake email (`<username>@checklist.local`) and calls `signInWithPassword`/`signUp`. `/tracker` and `/admin` gate access with `supabase.auth.getUser()` and redirect to `/login`; the checklist at `/` is **public** (read-only, anon RLS policies + table GRANTs from `db/04`, Realtime updates work for anonymous visitors).
+2. **Legacy custom auth** — `app/api/login/route.ts` (bcrypt against a `users` table, sets a `session_user` cookie, uses the service-role key) and `app/api/logout/route.ts`. Predates Supabase Auth; nothing reads the `session_user` cookie.
+
+Admin access (`app/admin/`) additionally requires a row in the `admin_users` table for the logged-in user.
+
+### Supervisor tracking system
+
+The app's purpose: **supervisors** (any authenticated user) track challenge progress for a supervised player. The core flow is the `/tracker` page (`app/tracker/TrackerPanel.tsx`): quick-action chips are generated from the rules of the selected week's incomplete challenges; pressing one + entering an amount calls the `report_event` RPC, which finds ALL matching `challenge_rules` and applies progress respecting `match_scope` (`any_match` / `same_match` / `different_matches`), phase gating (only the lowest incomplete `phase_order` of a `challenge_lines` group advances), and `rule_conditions` (event must include all of a rule's condition keys). Matches are started/ended with `start_match()`/`end_active_match()`, which also reset incomplete `same_match` progress. SQL for all of this lives in `challenges_checklist/db/` (01 = engine, 02 = Season 8 data); run it via the Management API.
+
+`challenges.unit`: `'value'` = amounts are summed (damage, health, materials); `'count'` = each event adds its amount as occurrences; `'distinct_location'` = counts distinct named locations (tracked in `challenge_distinct_progress`; repeating a location does not add). `match_rule_progress` stores per-rule hits: `match_id` null = global accumulator for `any_match` AND-rules; per-match rows enforce once-per-match semantics.
+
+`challenges.is_meta`: one auto-computed "Complete all weekly challenges" row per week. Phase lines (`line_id` groups) count as ONE challenge toward it, done only when every phase is complete; the meta's `target_value` is the week's challenge count (kept up to date by the trigger). The `trg_sync_week_meta` trigger recomputes it whenever any challenge's `is_completed`/`current_value` changes; the manual RPCs and `report_event` refuse to touch meta rows. When seeding a new season, insert its meta rows too (see `db/03_distinct_meta.sql` section 7).
+
+The tracker is a **global panel**: it loads the whole season and builds per-action category cards (weapon/object/location toggles + condition checkmarks, options derived from pending unlocked rules, so they disappear as challenges complete). The amount input only appears for actions with pending `value`-unit challenges. Item icons live in `public/icons/<code>.png` (downloaded from the Fortnite wiki via its MediaWiki API; `FortniteIcon` falls back to emoji), and both pages use Fortnite-style week tab buttons (`WeekTabs`) and mission cards (`MissionCard`).
+
+### Development tips (DB + testing)
+
+- Run SQL via the Management API: write the statement(s) to a file, JSON-encode with python (`json.dump({'query': sql}, ...)`), then `curl -X POST https://api.supabase.com/v1/projects/ucjuxngjmcdwggishima/database/query --data @file`. Only the LAST statement's result is returned — collect multi-step test output into a temp table and select it at the end. Use project-relative paths for files Python reads (`/tmp` is git-bash-only, invisible to native Windows Python).
+- To test `report_event`/`start_match` from SQL (they require `auth.uid()`), prepend: `select set_config('request.jwt.claims', '{"sub":"<user-uuid>","role":"authenticated"}', false);` in the same request.
+- Full progress reset: `delete from challenge_distinct_progress; delete from match_rule_progress; delete from matches; update challenges set current_value = 0, is_completed = false where is_meta = false;` (the meta trigger recomputes the weekly meta rows automatically).
+- Adding a future season: insert into `seasons`, its `challenge_weeks`, one `is_meta` challenge per week (see `db/03_distinct_meta.sql` §7), then the challenges/rules following the `db/02_season8.sql` pg_temp-helper pattern. The UI picks up new seasons/weeks automatically.
+- Icon substitutions to be aware of: `volcano_vent` uses the "Air Vent" device icon; `vehicle` uses the Quadcrasher icon, `the_baller` the proper Baller vehicle PNG, and `treasure_map_knife`/`treasure_map_magnify` share the generic "Loading Screen" icon. To replace an icon: resolve the file with the MediaWiki API (`fortnite.fandom.com/api.php?action=query&titles=File:<name>&prop=imageinfo&iiprop=url`, browser User-Agent required; direct `Special:FilePath` returns 403) and save to `public/icons/<code>.png`.
+- On Windows, killing `npm run dev` can orphan the Node child holding port 3000; find it with `netstat -ano | grep :3000` and `taskkill //PID <pid> //F`.
+
+Season/week navigation: both `/` and `/tracker` take `?season=<code>&week=<n>` (helper: `app/lib/selection.ts`, picker: `app/components/SeasonWeekPicker.tsx`); defaults to the latest season's week 1.
+
+### Data model (Supabase tables)
+
+- `challenges` — the core table. `kind` is `'simple'` (toggle) or `'progress'` (numeric `current_value`/`target_value`). Optional `line_id` + `phase_order` group challenges into sequential phases of a `challenge_lines` row. `match_scope` is `any_match` / `same_match` / `different_matches`.
+- Rules system for auto-tracking: `challenge_rules` links a challenge to an `action_types` row plus optional `game_objects`, `tags`, and `locations` constraints (required vs. target object/tag). `game_object_tags` is the object↔tag join table. Progress challenges have a `rules_operator` (`and`/`or`).
+- Manual writes from the tracker's week view go through **Postgres RPC functions**, not direct table updates: `toggle_challenge_completion`, `increase_challenge_progress`, `update_challenge_progress`, `reset_challenge_progress` (current versions in `db/05`). They require an authenticated user; for `same_match`/`different_matches` challenges an active match is required only to ADD progress — removing progress (slider down, untoggle, reset) is always allowed and clears the challenge's `match_rule_progress`/`challenge_distinct_progress` accumulators when it reaches 0.
+- Multi-location challenges are modeled as one rule per location: the 7 pirate camps and 3 giant faces are separate `locations` rows (`pirate_camp_*`, `giant_face_*`, `named_location=false`); "visit all X" uses `rules_operator='and'` (each rule counts once via the global accumulator), "any X counts" uses `'or'`, and same_match variants count each rule once per match (see `db/05`).
+- **Visit/dance rules never use target objects** — anything visited/danced-at is a `locations` row (hot springs, dinosaurs, ice sculptures, wooden rabbit/stone pig/metal llama, per-POI treasure signposts; migrated in `db/06`).
+- **Consumables**: `object_effects` (db/06) maps an object + trigger action to a synthetic effect event (apple → `use` triggers `gain` ×5 health, mushroom ×5 shield — Season 8 values). `report_event` fires the effect recursively after the main loop, so registering apple/mushroom consumption under "usar" advances the gain challenges; the tracker moves effect-covered options from the effect category into the trigger category (`effects` prop).
+- **Implications** (db/07-08): any non-visit event with a location also fires a synthetic `visit` at that location (kill at a pirate camp counts as visiting it), and `event_implications` rows fire extra events (damage `while_on_zipline` → use zipline; damage `after_volcano_vent` → use volcano vent; damage/kill with a used object → use it). Synthetic events pass no conditions, so condition-gated rules don't false-positive.
+- **Phase lines mimic old Fortnite staged challenges** (db/07-08): challenges with `line_id` require an active match to progress, and when a phase completes, `challenges.completed_in_match` records the match — the next phase stays locked (engine + `computeLockedIds`) until `end_active_match()` clears the column. The manual RPCs enforce the same gate.
+- **i18n**: `display_name` is the SPANISH (shown) name everywhere; `display_name_en` (on game_objects, tags, locations, action_types, challenge_weeks, seasons) preserves English for future locale switching. Seasons 9/10 exist with `is_locked=true` (non-selectable; `getSeasonWeekSelection` ignores locked seasons); season tab buttons use the wiki loading-screen art in `public/seasons/<code>.png`.
+- **Weapon-only conditions**: `tags.is_weapon`/`game_objects.is_weapon` + `rule_conditions.requires_weapon` — distance/manner conditions (50m, headshot, from above/below, zipline, descending) hide in the tracker when the selected used item isn't a normal weapon (pickaxe, vehicles, consumables).
+- `undo_rule_event(p_rule_id)` un-presses an option chip (deletes that rule's accumulator row scope-aware and recomputes). Satisfied options (rule already counted and unable to contribute right now) are hidden from category panels; distinct-location challenges stop offering already-visited places.
+- UI font: Fortnite's Burbank Big Condensed Black is commercial — the app uses Anton (headings/buttons) + Barlow Condensed (body) from Google Fonts as the closest free match (`app/layout.tsx`).
+- The admin panel (`app/admin/AdminPanel.tsx`) inserts directly into tables and uses `location.reload()` after each mutation.
+
+### Stream overlay (OBS)
+
+`app/overlay/` is a public, session-less page meant to be loaded as an **OBS Browser Source**. `page.tsx` (server) parses query params and renders `Overlay.tsx` (client), which subscribes to Supabase Realtime (`postgres_changes` UPDATE/INSERT on `challenges`) and shows a Fortnite-Season-8-style "challenge completed" notification (queued one at a time, slide-in + shine, gold variant for `is_meta` weekly metas). It detects the `false→true` transition by comparing against a `seen` map seeded on load (so old progress and INSERTs don't fire). Works for anonymous visitors because anon RLS already allows SELECT + Realtime on `challenges`. Params: `?season=<code>` (scope to one season's weeks), `?duration=<ms>` (default 6000), `?sound=0` (mute the synthesized WebAudio chime), `?test=1` (demo notification for positioning in OBS). **Font note:** the overlay uses the real Burbank font (`public/*.otf`, `@font-face` in the component's `styles`) for the authentic Fortnite look the user requested — this is intentionally different from the app UI, which uses Geist/Arial after the user rejected Burbank there; don't "fix" the overlay to match.
+
+### UI patterns
+
+`app/components/ChallengeChecklist.tsx` is the public read-only view: it receives the whole season's challenges from the server and switches weeks client-side (instant, URL synced with `history.replaceState`; only season changes hit the server). It subscribes to Supabase Realtime (`postgres_changes` on `challenges`) and refetches on any change. It hides locked phases (they appear in place when the previous phase completes). `TrackerPanel` follows the same all-season + client-side-week pattern and holds the manual controls (toggle/slider/increase) with optimistic local updates, calling the RPC and refetching on error; it shows locked phases with a lock icon. Both pages share a `SearchBox` (accent-insensitive, searches the selected week or, via the "Todas las semanas" tab in `WeekTabs`, the whole season) and render challenges through `sortWeekChallenges` (stable order: phase lines anchored at their oldest phase, phases ascending — completing a challenge never moves it). In the tracker's category cards (`deriveCategoryView`), option groups (weapons/targets/locations) always show ALL pending options — one action can advance several challenges at once. Only CONDITIONS filter: a rule's conditions show when its used/location constraints are pressed and its target matches the selection EXACTLY (both empty counts), so "headshot" disappears with a supply drop selected but "50 m" stays when picking a weapon; a condition required by every such rule is auto-checked and disabled. Layout is stability-first: `auto-fill` grids with `alignItems/alignContent: start` and uniform fixed-height chips in `repeat(auto-fill, minmax(170px, 1fr))` grids. In the week view, multi-option challenges (≥2 rules with a distinguishing object/target/location, e.g. the pirate camps) render one chip per rule that calls `report_event` with that rule's constraints; done-state comes from `match_rule_progress` (loaded in the page and on every refetch; scope-aware via `isRuleDone`). Amount inputs hold free text and can be emptied; empty/0 amounts are no-ops. Styling is inline `style` objects, not Tailwind classes, despite Tailwind being installed.

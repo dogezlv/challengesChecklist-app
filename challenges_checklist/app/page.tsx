@@ -1,65 +1,129 @@
-import Image from "next/image";
+import { createClient } from "@/utils/supabase/server";
+import { cookies } from "next/headers";
+import Link from "next/link";
+import ChallengeChecklist from "./components/ChallengeChecklist";
+import LogoutButton from "./components/LogoutButton";
+import { getSeasonWeekSelection } from "./lib/selection";
 
-export default function Home() {
+// Página pública: cualquiera puede ver las misiones (solo lectura, con
+// Realtime). Los controles de progreso viven en /tracker (requiere sesión).
+export default async function Page({
+  searchParams,
+}: {
+  searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+  const cookieStore = await cookies();
+  const supabase = createClient(cookieStore);
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  const params = await searchParams;
+  const { seasons, season, weeks, week } = await getSeasonWeekSelection(
+    supabase,
+    params
+  );
+
+  const weekIds = weeks.map((w) => w.id);
+
+  const [challengesRes, linesRes, adminRow] = await Promise.all([
+    weekIds.length
+      ? supabase
+          .from("challenges")
+          .select("*")
+          .in("week_id", weekIds)
+          .order("created_at", { ascending: true })
+      : Promise.resolve({ data: [], error: null }),
+    supabase.from("challenge_lines").select("*"),
+    user
+      ? supabase
+          .from("admin_users")
+          .select("user_id")
+          .eq("user_id", user.id)
+          .maybeSingle()
+      : Promise.resolve({ data: null }),
+  ]);
+
   return (
-    <div className="flex flex-col flex-1 items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex flex-1 w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
-        />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
+    <main
+      style={{
+        minHeight: "100vh",
+        background:
+          "linear-gradient(180deg, #050d1f 0%, #0a1a38 60%, #102448 100%)",
+        backgroundAttachment: "fixed",
+        padding: 28,
+      }}
+    >
+      <header
+        style={{
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "space-between",
+          flexWrap: "wrap",
+          gap: 12,
+          marginBottom: 18,
+        }}
+      >
+        <h1
+          style={{
+            color: "white",
+            margin: 0,
+            textTransform: "uppercase",
+            letterSpacing: 1,
+            fontWeight: 900,
+            fontSize: 26,
+          }}
+        >
+          Desafíos semanales
+        </h1>
+        <nav style={{ display: "flex", gap: 14, alignItems: "center" }}>
+          {user ? (
+            <>
+              <Link href="/tracker" style={{ color: "#7ccafa", fontWeight: 700 }}>
+                Panel de supervisión
+              </Link>
+              {adminRow.data && (
+                <Link href="/admin" style={{ color: "#7ccafa", fontWeight: 700 }}>
+                  Admin
+                </Link>
+              )}
+              <LogoutButton />
+            </>
+          ) : (
+            <Link
+              href="/login"
+              style={{
+                padding: "8px 16px",
+                borderRadius: 8,
+                background: "linear-gradient(180deg, #7ccafa 0%, #1c74e3 100%)",
+                color: "white",
+                fontWeight: 800,
+                fontSize: 13,
+                textTransform: "uppercase",
+                letterSpacing: 0.5,
+              }}
             >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
-    </div>
+              Iniciar sesión
+            </Link>
+          )}
+        </nav>
+      </header>
+
+      {"error" in challengesRes && challengesRes.error && (
+        <pre style={{ color: "#fca5a5" }}>
+          {JSON.stringify(challengesRes.error, null, 2)}
+        </pre>
+      )}
+
+      <ChallengeChecklist
+        initialChallenges={challengesRes.data || []}
+        lines={linesRes.data || []}
+        seasons={seasons}
+        weeks={weeks}
+        seasonCode={season?.code ?? ""}
+        initialWeekNumber={week?.week_number ?? 1}
+      />
+    </main>
   );
 }
