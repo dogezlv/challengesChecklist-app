@@ -9,7 +9,6 @@ import WeekTabs from "./WeekTabs";
 import type { Season, Week } from "../lib/selection";
 import {
   SCOPE_LABEL,
-  computeLockedIds,
   normalizeText,
   sortWeekChallenges,
   type Challenge,
@@ -51,28 +50,31 @@ export default function ChallengeChecklist({
   }
 
   const weekIds = useMemo(() => weeks.map((w) => w.id), [weeks]);
+  const weekIdSet = useMemo(() => new Set(weekIds), [weekIds]);
 
+  // Realtime: en vez de recargar TODA la temporada en cada cambio (lo que
+  // multiplicaría las consultas por cada espectador anónimo del stream),
+  // aplicamos directamente la fila del propio evento sobre el estado local.
   useEffect(() => {
-    async function loadChallenges() {
-      if (!weekIds.length) return;
-      const { data, error } = await supabase
-        .from("challenges")
-        .select("*")
-        .in("week_id", weekIds)
-        .order("created_at", { ascending: true });
-
-      if (!error && data) {
-        setChallenges(data);
-      }
-    }
-
     const channel = supabase
       .channel("challenges-realtime")
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "challenges" },
-        () => {
-          loadChallenges();
+        (payload) => {
+          setChallenges((prev) => {
+            if (payload.eventType === "DELETE") {
+              const oldId = (payload.old as { id?: string }).id;
+              return oldId ? prev.filter((c) => c.id !== oldId) : prev;
+            }
+            const row = payload.new as Challenge;
+            if (row.week_id && !weekIdSet.has(row.week_id)) return prev;
+            const idx = prev.findIndex((c) => c.id === row.id);
+            if (idx === -1) return [...prev, row];
+            const next = prev.slice();
+            next[idx] = row;
+            return next;
+          });
         }
       )
       .subscribe();
@@ -81,9 +83,8 @@ export default function ChallengeChecklist({
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekIds.join(",")]);
+  }, [weekIdSet]);
 
-  const lockedIds = useMemo(() => computeLockedIds(challenges), [challenges]);
   const query = normalizeText(search.trim());
 
   function lineName(lineId: string | null) {
@@ -93,14 +94,37 @@ export default function ChallengeChecklist({
     return name.split(" — ")[1] ?? name;
   }
 
-  // en el checklist las fases bloqueadas no se muestran: aparecen al
-  // completar la fase anterior, ocupando el mismo lugar de su línea
+  // de cada línea de fases mostramos SOLO la fase actual: la primera
+  // incompleta o, si ya están todas completas, la última (como completada).
+  // Así las fases ya superadas no se acumulan en la lista.
+  function currentPhaseIds(weekChalls: Challenge[]) {
+    const byLine = new Map<string, Challenge[]>();
+    for (const c of weekChalls) {
+      if (!c.line_id) continue;
+      const list = byLine.get(c.line_id) ?? [];
+      list.push(c);
+      byLine.set(c.line_id, list);
+    }
+    const show = new Set<string>();
+    byLine.forEach((list) => {
+      const sorted = [...list].sort(
+        (a, b) => (a.phase_order ?? 0) - (b.phase_order ?? 0)
+      );
+      const current =
+        sorted.find((c) => !c.is_completed) ?? sorted[sorted.length - 1];
+      if (current) show.add(current.id);
+    });
+    return show;
+  }
+
   function visibleWeekChallenges(week: Week) {
-    return sortWeekChallenges(
-      challenges.filter((c) => c.week_id === week.id && !c.is_meta)
-    ).filter(
+    const weekChalls = challenges.filter(
+      (c) => c.week_id === week.id && !c.is_meta
+    );
+    const phaseShow = currentPhaseIds(weekChalls);
+    return sortWeekChallenges(weekChalls).filter(
       (c) =>
-        !lockedIds.has(c.id) &&
+        (!c.line_id || phaseShow.has(c.id)) &&
         (!query || normalizeText(c.description).includes(query))
     );
   }

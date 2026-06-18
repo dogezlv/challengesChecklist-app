@@ -69,6 +69,7 @@ export const ACTION_EMOJI: Record<string, string> = {
   harvest: "⛏️",
   outlast: "⏳",
   revive: "🚑",
+  misc: "🎲",
 };
 
 // Solo la fase incompleta más baja de cada línea está activa, y además queda

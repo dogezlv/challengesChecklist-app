@@ -187,7 +187,7 @@ function deriveCategoryView(
 
 // acciones donde una "cantidad" no tiene sentido (se visita/baila/aterriza
 // una vez por registro)
-const NO_AMOUNT_ACTIONS = ["visit", "dance", "land"];
+const NO_AMOUNT_ACTIONS = ["visit", "dance", "land", "misc"];
 
 const CATEGORY_ORDER = [
   "kill",
@@ -202,6 +202,7 @@ const CATEGORY_ORDER = [
   "destroy",
   "outlast",
   "revive",
+  "misc",
 ];
 
 export default function TrackerPanel({
@@ -325,6 +326,20 @@ export default function TrackerPanel({
   const namedLocIds = useMemo(
     () => new Set(namedLocations.map((l) => l.id)),
     [namedLocations]
+  );
+
+  // Misiones misceláneas pendientes (acción "misc"): su sección no muestra
+  // chips/condiciones, sino la misión completa con un botón para completarla.
+  const miscChallenges = useMemo(
+    () =>
+      challenges.filter(
+        (c) =>
+          !c.is_completed &&
+          !c.is_meta &&
+          !lockedIds.has(c.id) &&
+          (c.challenge_rules ?? []).some((r) => r.action_type?.code === "misc")
+      ),
+    [challenges, lockedIds]
   );
 
   // Categorías del panel global: reglas pendientes de TODA la temporada,
@@ -1046,6 +1061,79 @@ export default function TrackerPanel({
                 </span>
               </div>
 
+              {cat.actionCode === "misc" ? (
+                <div style={{ display: "grid", gap: 8 }}>
+                  {miscChallenges.map((c) => {
+                    const r = (c.challenge_rules ?? []).find(
+                      (x) => x.action_type?.code === "misc"
+                    );
+                    if (!r) return null;
+                    const blocked =
+                      (c.match_scope !== "any_match" || !!c.line_id) &&
+                      !activeMatch;
+                    return (
+                      <div
+                        key={c.id}
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          justifyContent: "space-between",
+                          gap: 10,
+                          padding: "10px 12px",
+                          borderRadius: 10,
+                          border: "1px solid #2c4a7c",
+                          background: "#10254a",
+                        }}
+                      >
+                        <span style={{ fontSize: 13, lineHeight: 1.3 }}>
+                          {c.description}
+                        </span>
+                        <div
+                          style={{
+                            display: "grid",
+                            gap: 4,
+                            justifyItems: "end",
+                            flexShrink: 0,
+                          }}
+                        >
+                          <button
+                            disabled={busyRule === r.id || blocked}
+                            onClick={() => registerRule(c, r)}
+                            style={{
+                              ...button,
+                              opacity: busyRule === r.id || blocked ? 0.5 : 1,
+                              cursor:
+                                busyRule === r.id || blocked
+                                  ? "not-allowed"
+                                  : "pointer",
+                            }}
+                          >
+                            {busyRule === r.id ? "…" : "Completar"}
+                          </button>
+                          {blocked && (
+                            <span
+                              style={{
+                                color: "#fbbf24",
+                                fontSize: 11,
+                                textAlign: "right",
+                              }}
+                            >
+                              ⚠ Requiere partida activa
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
+                  {miscChallenges.length === 0 && (
+                    <span style={{ color: "#9fc9f5", fontSize: 13 }}>
+                      No quedan misiones misceláneas.
+                    </span>
+                  )}
+                </div>
+              ) : (
+              <>
+
               {view.usedOptions.length > 0 && (
                 <div style={{ display: "grid", gap: 8 }}>
                   <span style={groupLabel}>Arma / objeto usado</span>
@@ -1189,6 +1277,8 @@ export default function TrackerPanel({
                   {busyAction === cat.actionCode ? "Registrando…" : "Registrar"}
                 </button>
               </div>
+              </>
+              )}
 
               {res && (
                 <div
