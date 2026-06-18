@@ -5,16 +5,17 @@ import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import FortniteIcon from "../components/FortniteIcon";
 import LogoutButton from "../components/LogoutButton";
-import MissionCard from "../components/MissionCard";
+import MissionRow from "../components/MissionRow";
+import BattlePassBanner from "../components/BattlePassBanner";
+import PageBackground from "../components/PageBackground";
 import SearchBox from "../components/SearchBox";
 import WeekTabs from "../components/WeekTabs";
 import TopNav from "../components/TopNav";
-import { contentWrap, fnt, fs, pageMain, titleFont, yellowButton } from "../lib/theme";
+import { contentWrap, fnt, fs, pageMain, panel, titleFont, weekAccent, yellowButton } from "../lib/theme";
 import type { Season, Week } from "../lib/selection";
 import {
   ACTION_EMOJI,
   CHALLENGE_SELECT,
-  SCOPE_LABEL,
   computeLockedIds,
   normalizeText,
   sortWeekChallenges,
@@ -212,7 +213,6 @@ export default function TrackerPanel({
   seasonCode,
   initialWeekNumber,
   initialChallenges,
-  lines,
   actionTypes,
   locations,
   initialActiveMatch,
@@ -254,6 +254,8 @@ export default function TrackerPanel({
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState("");
   const [confirmReset, setConfirmReset] = useState(false);
+  // vista de prestigio en el panel por semana (no mezclar con los normales)
+  const [prestigeView, setPrestigeView] = useState(false);
   const [resetting, setResetting] = useState(false);
 
   // re-sincroniza cuando el servidor manda otra temporada (ajuste de estado
@@ -319,6 +321,27 @@ export default function TrackerPanel({
 
   const lockedIds = useMemo(() => computeLockedIds(challenges), [challenges]);
 
+  // Prestigio bloqueado: ids de desafíos de prestigio cuya semana aún tiene
+  // desafíos normales sin completar. No se pueden avanzar (el motor lo bloquea)
+  // y se ocultan de las acciones rápidas.
+  const prestigeLockedIds = useMemo(() => {
+    // semana bloqueada si tiene un normal incompleto O uno completado en la
+    // partida aún activa (completed_in_match no nulo): así el prestigio no se
+    // activa en la misma partida en que se cierra la semana, sino en la próxima
+    const weekBlocked = new Set<string>();
+    for (const c of challenges) {
+      if (c.is_meta || c.is_prestige || !c.week_id) continue;
+      if (!c.is_completed || c.completed_in_match) weekBlocked.add(c.week_id);
+    }
+    const set = new Set<string>();
+    for (const c of challenges) {
+      if (c.is_prestige && c.week_id && weekBlocked.has(c.week_id)) {
+        set.add(c.id);
+      }
+    }
+    return set;
+  }, [challenges]);
+
   const namedLocations = useMemo(
     () =>
       locations
@@ -340,9 +363,10 @@ export default function TrackerPanel({
           !c.is_completed &&
           !c.is_meta &&
           !lockedIds.has(c.id) &&
+          !prestigeLockedIds.has(c.id) &&
           (c.challenge_rules ?? []).some((r) => r.action_type?.code === "misc")
       ),
-    [challenges, lockedIds]
+    [challenges, lockedIds, prestigeLockedIds]
   );
 
   // Categorías del panel global: reglas pendientes de TODA la temporada,
@@ -374,7 +398,8 @@ export default function TrackerPanel({
     };
 
     for (const c of challenges) {
-      if (c.is_completed || c.is_meta || lockedIds.has(c.id)) continue;
+      if (c.is_completed || c.is_meta || lockedIds.has(c.id) || prestigeLockedIds.has(c.id))
+        continue;
       const totalRules = c.challenge_rules?.length ?? 0;
 
       for (const r of c.challenge_rules ?? []) {
@@ -497,6 +522,7 @@ export default function TrackerPanel({
   }, [
     challenges,
     lockedIds,
+    prestigeLockedIds,
     actionTypes,
     effects,
     ruleProgress,
@@ -765,7 +791,9 @@ export default function TrackerPanel({
   // en orden ascendente y sin moverse de sitio al completarse
   function weekItems(week: Week) {
     return sortWeekChallenges(
-      challenges.filter((c) => c.week_id === week.id && !c.is_meta)
+      challenges.filter(
+        (c) => c.week_id === week.id && !c.is_meta && !!c.is_prestige === prestigeView
+      )
     ).filter((c) => !query || normalizeText(c.description).includes(query));
   }
 
@@ -776,12 +804,21 @@ export default function TrackerPanel({
     return meta;
   }
 
-  function lineName(lineId: string | null) {
-    if (!lineId) return null;
-    const name = lines.find((l) => l.id === lineId)?.name;
-    if (!name) return null;
-    return name.split(" — ")[1] ?? name;
+  // % de la semana: normales llenan 0–100% y los prestigios suben a 100–200%
+  function weekStats(week: Week) {
+    const normals = challenges.filter(
+      (c) => c.week_id === week.id && !c.is_meta && !c.is_prestige
+    );
+    const prest = challenges.filter(
+      (c) => c.week_id === week.id && !c.is_meta && c.is_prestige
+    );
+    const nDone = normals.filter((c) => c.is_completed).length;
+    const pDone = prest.filter((c) => c.is_completed).length;
+    const nPct = normals.length ? (nDone / normals.length) * 100 : 0;
+    const pPct = prest.length ? (pDone / prest.length) * 100 : 0;
+    return nPct + pPct;
   }
+
 
   // ---- estilos ----
   const card: React.CSSProperties = {
@@ -912,6 +949,7 @@ export default function TrackerPanel({
 
   return (
     <main style={pageMain}>
+      <PageBackground />
       <div style={contentWrap}>
       {/* Barra de navegación */}
       <TopNav
@@ -1421,40 +1459,45 @@ export default function TrackerPanel({
 
         {viewWeeks.map((week) => {
           const items = weekItems(week);
-          const weekMeta = weekMetaOf(week);
+          const weekMeta = prestigeView ? null : weekMetaOf(week);
           if (showAll && items.length === 0 && !weekMeta) return null;
 
+          const accent = weekAccent(week.week_number);
           return (
-        <div key={week.id} style={{ display: "grid", gap: 10 }}>
-          {showAll && (
-            <h3
-              style={{
-                fontFamily: titleFont,
-                color: "#bfe6ff",
-                margin: "8px 0 0",
-                fontSize: 19,
-                textTransform: "uppercase",
-                letterSpacing: 1,
-                fontWeight: 400,
-              }}
-            >
-              {week.display_name ?? `Semana ${week.week_number}`}
-            </h3>
-          )}
+        <div
+          key={week.id}
+          style={{
+            borderRadius: 12,
+            overflow: "hidden",
+            border: `1px solid ${accent}59`,
+            boxShadow: "0 8px 26px rgba(0,0,0,0.32)",
+          }}
+        >
+          <BattlePassBanner
+            label="Desafíos del pase de batalla"
+            title={week.display_name ?? `Semana ${week.week_number}`}
+            subtitle="Completa los objetivos para avanzar"
+            percent={weekStats(week)}
+            accent={accent}
+            flush
+          />
+
+          <div style={{ ...panel, borderRadius: 0, border: "none", padding: `${fs(6, 12)} ${fs(8, 18)}` }}>
           {weekMeta && (
-            <MissionCard
-              title={`Semana ${week.week_number} · Recompensa`}
+            <MissionRow
               quest={weekMeta.description}
               current={weekMeta.current_value ?? 0}
               target={weekMeta.target_value ?? 7}
               completed={weekMeta.is_completed}
               meta
+              first
             />
           )}
-          {items.map((c) => {
+          {items.map((c, i) => {
             const current = c.current_value ?? 0;
             const target = c.target_value ?? 1;
-            const locked = lockedIds.has(c.id);
+            // bloqueado por fase O por ser prestigio con la semana incompleta
+            const locked = lockedIds.has(c.id) || prestigeLockedIds.has(c.id);
             // la partida activa solo se exige para AÑADIR progreso en
             // desafíos de partida Y en fases (sistema antiguo de Fortnite);
             // quitar progreso siempre se permite
@@ -1500,17 +1543,35 @@ export default function TrackerPanel({
               );
 
             return (
-              <MissionCard
+              <MissionRow
                 key={c.id}
-                title={`${SCOPE_LABEL[c.match_scope]}${
-                  lineName(c.line_id) ? ` · ${lineName(c.line_id)}` : ""
-                }`}
                 quest={c.description}
                 current={current}
                 target={target}
                 completed={c.is_completed}
                 locked={locked}
+                lockedLabel={
+                  prestigeLockedIds.has(c.id)
+                    ? "Completa la semana normal para desbloquear el prestigio"
+                    : undefined
+                }
+                accent={accent}
+                first={!weekMeta && i === 0}
               >
+                {prestigeLockedIds.has(c.id) && (
+                  <span
+                    style={{
+                      display: "flex",
+                      alignItems: "center",
+                      gap: 6,
+                      color: "#fbbf24",
+                      fontSize: fs(12, 17),
+                    }}
+                  >
+                    🔒 Completa los desafíos normales de la semana para
+                    desbloquear este prestigio
+                  </span>
+                )}
                 {showOptionChips && (
                   <div
                     style={{
@@ -1774,12 +1835,71 @@ export default function TrackerPanel({
                     </div>
                   </div>
                 )}
-              </MissionCard>
+              </MissionRow>
             );
           })}
+          </div>
         </div>
           );
         })}
+
+        {/* Botón para alternar la vista de prestigio (no mezclar con normales) */}
+        <div
+          style={{
+            display: "flex",
+            alignItems: "center",
+            justifyContent: prestigeView ? "flex-end" : "space-between",
+            gap: 16,
+            flexWrap: "wrap",
+            minHeight: fs(56, 84),
+            borderRadius: 10,
+            padding: `${fs(11, 18)} ${fs(14, 24)}`,
+            border: "1px solid rgba(150,200,248,0.28)",
+            background: "rgba(6, 32, 74, 0.55)",
+          }}
+        >
+          {!prestigeView && (
+            <span style={{ display: "grid", gap: 3 }}>
+              <span
+                style={{
+                  display: "flex",
+                  alignItems: "center",
+                  gap: 8,
+                  fontFamily: titleFont,
+                  fontSize: fs(14, 23),
+                  letterSpacing: 1.4,
+                  textTransform: "uppercase",
+                  color: fnt.yellow,
+                }}
+              >
+                <FortniteIcon code="battle_star" emoji="⭐" size={18} />
+                Misión de prestigio
+              </span>
+              <span style={{ fontSize: fs(11, 16), color: fnt.textDim }}>
+                Objetivos más difíciles (se desbloquean al completar la semana)
+              </span>
+            </span>
+          )}
+          <button
+            onClick={() => setPrestigeView((p) => !p)}
+            style={{
+              fontFamily: titleFont,
+              fontSize: fs(15, 25),
+              letterSpacing: 1,
+              textTransform: "uppercase",
+              whiteSpace: "nowrap",
+              cursor: "pointer",
+              padding: `${fs(9, 14)} ${fs(18, 30)}`,
+              borderRadius: 6,
+              border: "none",
+              color: "#ffffff",
+              background: "linear-gradient(180deg, #36a2ff 0%, #1f6fe0 100%)",
+              boxShadow: "0 3px 0 rgba(0,0,0,0.22)",
+            }}
+          >
+            {prestigeView ? "Ver normal" : "Ver prestigio"}
+          </button>
+        </div>
 
         {query &&
           viewWeeks.every(

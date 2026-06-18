@@ -57,10 +57,11 @@ export const fnt = {
 export const pageBackground =
   "radial-gradient(125% 100% at 50% 0%, #3fb0f0 0%, #1d7dd6 36%, #0c55a8 66%, #063c84 100%)";
 
+// El fondo (degradado + malla animada) lo pinta <PageBackground/> como capa
+// fija detrás (z-index:-1), por eso aquí el fondo es transparente.
 export const pageMain: CSSProperties = {
   minHeight: "100vh",
-  background: pageBackground,
-  backgroundAttachment: "fixed",
+  background: "transparent",
   color: fnt.text,
   padding: 0,
 };
@@ -115,7 +116,7 @@ export const panel: CSSProperties = {
 export const banner: CSSProperties = {
   position: "relative",
   borderRadius: 10,
-  padding: `${fs(14, 28)} ${fs(16, 36)}`,
+  padding: `${fs(9, 15)} ${fs(14, 28)}`,
   overflow: "hidden",
   background:
     "linear-gradient(95deg, rgba(8,42,86,0.92) 0%, rgba(16,86,150,0.85) 55%, rgba(20,120,110,0.8) 100%)",
@@ -193,6 +194,54 @@ export function progressFill(
     height: "100%",
     background:
       variant === "done" ? fnt.fillDone : variant === "meta" ? fnt.fillMeta : fnt.fill,
+    transition: "width 0.35s ease",
+  };
+}
+
+// ── Color característico por semana (paleta tipo Fortnite) ───────────────────
+// Cada semana tiene su acento; tiñe el banner, el chevron, el borde y la barra
+// de la tarjeta para que cada semana se sienta única.
+export const WEEK_ACCENTS = [
+  "#3fa9ff", // 1 azul
+  "#b07cff", // 2 violeta
+  "#3ed67a", // 3 verde
+  "#ff9a3c", // 4 naranja
+  "#ff5fa8", // 5 magenta
+  "#22d3c4", // 6 turquesa
+  "#ff5a4d", // 7 rojo
+  "#ffc63d", // 8 ámbar
+  "#7c8cff", // 9 índigo
+  "#a6e635", // 10 lima
+] as const;
+
+export function weekAccent(weekNumber: number): string {
+  return WEEK_ACCENTS[(weekNumber - 1) % WEEK_ACCENTS.length] ?? "#3fa9ff";
+}
+
+// Acento del modo PRESTIGIO (verde/teal de la Temporada X), pisa el de semana.
+export const PRESTIGE_ACCENT = "#14d6a4";
+
+// Banner tintado con un acento (semana o prestigio).
+export function accentBanner(accent: string): CSSProperties {
+  return {
+    position: "relative",
+    borderRadius: 10,
+    padding: `${fs(9, 15)} ${fs(14, 28)}`,
+    overflow: "hidden",
+    background: `linear-gradient(100deg, rgba(7,33,72,0.96) 0%, ${accent}b0 60%, ${accent} 116%)`,
+    border: `1px solid ${accent}66`,
+    boxShadow: `0 6px 20px rgba(0,0,0,0.3), inset 0 0 0 1px rgba(255,255,255,0.06)`,
+  };
+}
+
+// Relleno de barra tintado con un acento.
+export function accentFill(percent: number, accent: string): CSSProperties {
+  return {
+    width: `${percent}%`,
+    height: "100%",
+    borderRadius: 999,
+    background: `linear-gradient(90deg, ${accent} 0%, #eafcff 165%)`,
+    boxShadow: `0 0 10px ${accent}80`,
     transition: "width 0.35s ease",
   };
 }

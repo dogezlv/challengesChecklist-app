@@ -40,6 +40,9 @@ export type Challenge = {
   phase_order: number | null;
   week_id: string | null;
   is_meta: boolean;
+  // desafío de prestigio (extra, más difícil): se desbloquea al completar
+  // todos los desafíos normales de la semana
+  is_prestige?: boolean;
   // partida (aún activa) en la que se completó: bloquea la siguiente fase
   // de la línea hasta que esa partida termine
   completed_in_match?: string | null;

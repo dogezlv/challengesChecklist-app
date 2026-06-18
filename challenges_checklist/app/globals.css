@@ -33,6 +33,109 @@ body {
   font-weight: 500;
 }
 
+/* ── Fondo animado de página (malla triangular HD) ──────────────────────────
+   Capa fija detrás del contenido. El degradado va inline en el componente;
+   aquí van el recorte/fade (en padres estáticos) y la deriva (transform, solo
+   en GPU). El overlay no usa este componente. */
+.fn-bg {
+  position: fixed;
+  inset: 0;
+  z-index: -1;
+  overflow: hidden;
+  pointer-events: none;
+}
+.fn-bg-fade {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  /* viñeta suave: la malla se ve casi en todo y se desvanece en los bordes
+     lejanos; fija al viewport porque vive en este padre estático. */
+  -webkit-mask-image: radial-gradient(135% 130% at 50% 18%, #000 62%, transparent 100%);
+  mask-image: radial-gradient(135% 130% at 50% 18%, #000 62%, transparent 100%);
+}
+.fn-bg-mesh {
+  position: absolute;
+  /* sobredimensionado > 1 baldosa en cada lado para que la deriva no descubra
+     bordes; al moverse exactamente 1 baldosa el bucle es invisible. */
+  inset: -340px;
+  background-repeat: repeat;
+  will-change: transform;
+}
+/* Malla fina (capa cercana), deriva diagonal hacia abajo-izquierda */
+.fn-bg-mesh--a {
+  background-size: 100px 173.21px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='100' height='173.21'%3E%3Cpath d='M0 0H100M0 86.6H100M0 173.21H100M0 0L100 173.21M100 0L0 173.21' fill='none' stroke='%23ffffff' stroke-opacity='0.10' stroke-width='0.8'/%3E%3Cg fill='%23ffffff' fill-opacity='0.16'%3E%3Ccircle cx='0' cy='0' r='1.4'/%3E%3Ccircle cx='100' cy='0' r='1.4'/%3E%3Ccircle cx='50' cy='86.6' r='1.4'/%3E%3Ccircle cx='0' cy='173.21' r='1.4'/%3E%3Ccircle cx='100' cy='173.21' r='1.4'/%3E%3C/g%3E%3C/svg%3E");
+  animation: fnBgDriftA 32s linear infinite;
+}
+/* Malla amplia (capa lejana), más tenue, deriva opuesta más lenta */
+.fn-bg-mesh--b {
+  opacity: 0.8;
+  background-size: 160px 277.13px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='277.13'%3E%3Cpath d='M0 0H160M0 138.56H160M0 277.13H160M0 0L160 277.13M160 0L0 277.13' fill='none' stroke='%23ffffff' stroke-opacity='0.07' stroke-width='0.9'/%3E%3Cg fill='%23ffffff' fill-opacity='0.11'%3E%3Ccircle cx='0' cy='0' r='1.7'/%3E%3Ccircle cx='160' cy='0' r='1.7'/%3E%3Ccircle cx='80' cy='138.56' r='1.7'/%3E%3Ccircle cx='0' cy='277.13' r='1.7'/%3E%3Ccircle cx='160' cy='277.13' r='1.7'/%3E%3C/g%3E%3C/svg%3E");
+  animation: fnBgDriftB 55s linear infinite;
+}
+@keyframes fnBgDriftA {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(-100px, -173.21px, 0);
+  }
+}
+@keyframes fnBgDriftB {
+  from {
+    transform: translate3d(0, 0, 0);
+  }
+  to {
+    transform: translate3d(160px, -277.13px, 0);
+  }
+}
+
+/* Tinte de PRESTIGIO sobre el fondo: lavado de color (de la semana) en los
+   bordes que late suavemente. Apagado por defecto; se enciende cuando
+   ChallengeChecklist pone html[data-prestige="on"] + --prestige-accent. */
+.fn-bg-prestige {
+  position: absolute;
+  inset: 0;
+  opacity: 0; /* apagado */
+  transform: scale(1.12);
+  /* opacity/transform SOLO por transición → entrada y salida suaves ambas */
+  transition: opacity 0.7s ease, transform 0.7s ease;
+  pointer-events: none;
+  filter: blur(4px);
+  /* lavado de color del color de la semana, concentrado arriba y abajo
+     (blend normal, no screen, para que se note incluso si la semana es azul) */
+  background:
+    radial-gradient(140% 110% at 50% -12%, var(--prestige-accent, #14d6a4) 0%, transparent 68%),
+    radial-gradient(130% 110% at 50% 118%, var(--prestige-accent, #14d6a4) 0%, transparent 64%);
+}
+html[data-prestige="on"] .fn-bg-prestige {
+  opacity: 0.5; /* algo menos intenso */
+  transform: scale(1);
+  /* el keyframe SOLO toca filter (brillo): destello de entrada + latido. No
+     toca opacity/transform, así la transición maneja entrada y salida sin bugs */
+  animation:
+    fnPrestigeEnter 0.9s ease-out forwards,
+    fnPrestigePulse 4.5s ease-in-out 0.9s infinite;
+}
+@keyframes fnPrestigeEnter {
+  0% {
+    filter: blur(8px) brightness(1.8) saturate(1.3);
+  }
+  /* termina EXACTAMENTE donde arranca el latido (0.85) para que no parpadee */
+  100% {
+    filter: blur(4px) brightness(0.85) saturate(1);
+  }
+}
+@keyframes fnPrestigePulse {
+  0%,
+  100% {
+    filter: blur(4px) brightness(0.85);
+  }
+  50% {
+    filter: blur(4px) brightness(1.25);
+  }
+}
 /* Los controles de formulario no heredan la fuente por defecto: forzarlo para
    que botones/inputs usen Burbank Small Medium como el resto del cuerpo. */
 button,

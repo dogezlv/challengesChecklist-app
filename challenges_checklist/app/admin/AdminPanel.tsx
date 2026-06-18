@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import LogoutButton from "../components/LogoutButton";
+import PageBackground from "../components/PageBackground";
 import TopNav from "../components/TopNav";
 import { contentWrap, fnt, fs, pageMain, panel, titleFont, yellowButton } from "../lib/theme";
 
@@ -341,6 +342,7 @@ export default function AdminPanel({
 
   return (
     <main style={pageMain}>
+      <PageBackground />
       <div style={contentWrap}>
       <TopNav
         tabs={[
