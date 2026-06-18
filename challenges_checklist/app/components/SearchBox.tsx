@@ -1,5 +1,7 @@
 "use client";
 
+import { fnt } from "../lib/theme";
+
 export default function SearchBox({
   value,
   onChange,
@@ -16,10 +18,10 @@ export default function SearchBox({
       onChange={(e) => onChange(e.target.value)}
       placeholder={placeholder}
       style={{
-        padding: "10px 14px",
-        borderRadius: 8,
-        border: "1px solid #1c74e3",
-        background: "#0b1d3a",
+        padding: "10px 16px",
+        borderRadius: 999,
+        border: `1px solid ${fnt.border}`,
+        background: "rgba(4, 24, 58, 0.55)",
         color: "white",
         colorScheme: "dark",
         fontSize: 14,

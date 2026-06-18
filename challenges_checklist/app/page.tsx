@@ -3,6 +3,8 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import ChallengeChecklist from "./components/ChallengeChecklist";
 import LogoutButton from "./components/LogoutButton";
+import TopNav from "./components/TopNav";
+import { contentWrap, navTab, pageMain } from "./lib/theme";
 import { getSeasonWeekSelection } from "./lib/selection";
 
 // Página pública: cualquiera puede ver las misiones (solo lectura, con
@@ -45,85 +47,43 @@ export default async function Page({
       : Promise.resolve({ data: null }),
   ]);
 
+  const navTabs = [
+    { label: "Misiones", href: "/", active: true },
+    ...(user ? [{ label: "Panel", href: "/tracker" }] : []),
+    ...(user && adminRow.data ? [{ label: "Admin", href: "/admin" }] : []),
+  ];
+
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background:
-          "linear-gradient(180deg, #050d1f 0%, #0a1a38 60%, #102448 100%)",
-        backgroundAttachment: "fixed",
-        padding: 28,
-      }}
-    >
-      <header
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 12,
-          marginBottom: 18,
-        }}
-      >
-        <h1
-          style={{
-            color: "white",
-            margin: 0,
-            textTransform: "uppercase",
-            letterSpacing: 1,
-            fontWeight: 900,
-            fontSize: 26,
-          }}
-        >
-          Desafíos semanales
-        </h1>
-        <nav style={{ display: "flex", gap: 14, alignItems: "center" }}>
-          {user ? (
-            <>
-              <Link href="/tracker" style={{ color: "#7ccafa", fontWeight: 700 }}>
-                Panel de supervisión
-              </Link>
-              {adminRow.data && (
-                <Link href="/admin" style={{ color: "#7ccafa", fontWeight: 700 }}>
-                  Admin
-                </Link>
-              )}
+    <main style={pageMain}>
+      <div style={contentWrap}>
+        <TopNav
+          tabs={navTabs}
+          right={
+            user ? (
               <LogoutButton />
-            </>
-          ) : (
-            <Link
-              href="/login"
-              style={{
-                padding: "8px 16px",
-                borderRadius: 8,
-                background: "linear-gradient(180deg, #7ccafa 0%, #1c74e3 100%)",
-                color: "white",
-                fontWeight: 800,
-                fontSize: 13,
-                textTransform: "uppercase",
-                letterSpacing: 0.5,
-              }}
-            >
-              Iniciar sesión
-            </Link>
-          )}
-        </nav>
-      </header>
+            ) : (
+              <Link href="/login" style={navTab(false)}>
+                Iniciar sesión
+              </Link>
+            )
+          }
+        />
 
-      {"error" in challengesRes && challengesRes.error && (
-        <pre style={{ color: "#fca5a5" }}>
-          {JSON.stringify(challengesRes.error, null, 2)}
-        </pre>
-      )}
+        {"error" in challengesRes && challengesRes.error && (
+          <pre style={{ color: "#fca5a5" }}>
+            {JSON.stringify(challengesRes.error, null, 2)}
+          </pre>
+        )}
 
-      <ChallengeChecklist
-        initialChallenges={challengesRes.data || []}
-        lines={linesRes.data || []}
-        seasons={seasons}
-        weeks={weeks}
-        seasonCode={season?.code ?? ""}
-        initialWeekNumber={week?.week_number ?? 1}
-      />
+        <ChallengeChecklist
+          initialChallenges={challengesRes.data || []}
+          lines={linesRes.data || []}
+          seasons={seasons}
+          weeks={weeks}
+          seasonCode={season?.code ?? ""}
+          initialWeekNumber={week?.week_number ?? 1}
+        />
+      </div>
     </main>
   );
 }

@@ -6,6 +6,9 @@ import { createClient } from "@/utils/supabase/client";
 import MissionCard from "./MissionCard";
 import SearchBox from "./SearchBox";
 import WeekTabs from "./WeekTabs";
+import BattlePassBanner from "./BattlePassBanner";
+import RewardStrip from "./RewardStrip";
+import { fnt, panel } from "../lib/theme";
 import type { Season, Week } from "../lib/selection";
 import {
   SCOPE_LABEL,
@@ -145,6 +148,13 @@ export default function ChallengeChecklist({
     );
   }
 
+  // conteo de la semana (completados / total no-meta) para banner y tira
+  function weekStats(week: Week) {
+    const all = challenges.filter((c) => c.week_id === week.id && !c.is_meta);
+    const done = all.filter((c) => c.is_completed).length;
+    return { total: all.length, done, percent: all.length ? (done / all.length) * 100 : 0 };
+  }
+
   const tabWeek = weeks.find((w) => w.week_number === weekTab) ?? weeks[0];
   const viewWeeks = showAll ? weeks : tabWeek ? [tabWeek] : [];
 
@@ -180,45 +190,65 @@ export default function ChallengeChecklist({
         const metaCard = weekMetaCard(week);
         if (showAll && items.length === 0 && !metaCard) return null;
 
+        const stats = weekStats(week);
+
         return (
-          <div key={week.id} style={{ display: "grid", gap: 10 }}>
-            {showAll && (
-              <h2
+          <div key={week.id} style={{ display: "grid", gap: 12 }}>
+            <BattlePassBanner
+              label="Desafíos del pase de batalla"
+              title={week.display_name ?? `Semana ${week.week_number}`}
+              subtitle="Completa los objetivos para avanzar"
+              percent={stats.percent}
+            />
+
+            <div
+              style={{
+                ...panel,
+                padding: 14,
+                display: "grid",
+                gap: 14,
+              }}
+            >
+              <RewardStrip total={stats.total} done={stats.done} />
+
+              <div
                 style={{
-                  color: "#7ccafa",
-                  margin: "8px 0 0",
-                  fontSize: 16,
-                  textTransform: "uppercase",
-                  letterSpacing: 1,
-                  fontWeight: 900,
+                  borderTop: `1px solid ${fnt.borderSoft}`,
+                  display: "grid",
+                  gap: 8,
+                  paddingTop: 14,
                 }}
               >
-                {week.display_name ?? `Semana ${week.week_number}`}
-              </h2>
-            )}
+              {metaCard}
 
-            {metaCard}
+              {items.map((challenge) => {
+                const line = lineName(challenge.line_id);
+                return (
+                  <MissionCard
+                    key={challenge.id}
+                    title={`${SCOPE_LABEL[challenge.match_scope]}${line ? ` · ${line}` : ""}`}
+                    quest={challenge.description}
+                    current={challenge.current_value ?? 0}
+                    target={challenge.target_value ?? 1}
+                    completed={challenge.is_completed}
+                  />
+                );
+              })}
 
-            {items.map((challenge) => {
-              const line = lineName(challenge.line_id);
-              return (
-                <MissionCard
-                  key={challenge.id}
-                  title={`${SCOPE_LABEL[challenge.match_scope]}${line ? ` · ${line}` : ""}`}
-                  quest={challenge.description}
-                  current={challenge.current_value ?? 0}
-                  target={challenge.target_value ?? 1}
-                  completed={challenge.is_completed}
-                />
-              );
-            })}
+              {items.length === 0 && !metaCard && (
+                <p style={{ color: fnt.textDim, margin: 0, padding: 8 }}>
+                  No hay desafíos para mostrar.
+                </p>
+              )}
+              </div>
+            </div>
           </div>
         );
       })}
 
       {query &&
         viewWeeks.every((w) => visibleWeekChallenges(w).length === 0 && !weekMetaCard(w)) && (
-          <p style={{ color: "#9fc9f5", margin: 0 }}>
+          <p style={{ color: fnt.textDim, margin: 0 }}>
             Ningún desafío coincide con &quot;{search}&quot;.
           </p>
         )}
