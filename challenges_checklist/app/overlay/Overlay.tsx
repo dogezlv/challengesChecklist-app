@@ -12,6 +12,7 @@ type Notice = {
   type: "progress" | "completed" | "meta";
   quest: string;
   week: string | null;
+  from: number;
   to: number;
   target: number;
 };
@@ -46,8 +47,6 @@ export default function Overlay({
   const state = useRef<Map<string, { value: number; completed: boolean }>>(
     new Map()
   );
-  // último valor YA MOSTRADO de cada desafío: la barra anima desde aquí.
-  const shown = useRef<Map<string, number>>(new Map());
   // week_id -> número de semana, para etiquetar la notificación.
   const weeks = useRef<Map<string, number>>(new Map());
   const allowedWeeks = useRef<Set<string> | null>(null);
@@ -69,7 +68,7 @@ export default function Overlay({
     if (!next) return;
 
     currentRef.current = next;
-    fromRef.current = shown.current.get(next.id) ?? 0;
+    fromRef.current = next.from;
     setAnim(fromRef.current);
     setCurrent(next);
     setPhase("enter");
@@ -81,7 +80,6 @@ export default function Overlay({
     t(ENTER_MS, () => setPhase("show")); // dispara el relleno
     t(ENTER_MS + FILL_MS + durationMs, () => setPhase("leaving"));
     t(ENTER_MS + FILL_MS + durationMs + EXIT_MS, () => {
-      shown.current.set(next.id, next.to); // queda como base para la próxima
       currentRef.current = null;
       setCurrent(null);
       pump(); // siguiente de la cola
@@ -116,20 +114,21 @@ export default function Overlay({
     if (allowed && row.week_id && !allowed.has(row.week_id)) return;
 
     const weekNum = row.week_id ? weeks.current.get(row.week_id) : undefined;
-    const mk = (type: Notice["type"], to: number): Notice => ({
+    const mk = (type: Notice["type"], from: number, to: number): Notice => ({
       id: row.id,
       key: `${row.id}-${Date.now()}`,
       type,
       quest: row.description,
       week: weekNum != null ? `Semana ${weekNum}` : null,
+      from,
       to,
       target,
     });
 
     if (done && !prev.completed) {
-      enqueue(mk(row.is_meta ? "meta" : "completed", target));
+      enqueue(mk(row.is_meta ? "meta" : "completed", prev.value, target));
     } else if (!done && val > prev.value) {
-      enqueue(mk("progress", val));
+      enqueue(mk("progress", prev.value, val));
     }
   }
 
@@ -166,7 +165,6 @@ export default function Overlay({
           value: c.current_value ?? 0,
           completed: c.is_completed,
         });
-        shown.current.set(c.id, c.current_value ?? 0);
       }
     }
     seed();
@@ -178,6 +176,7 @@ export default function Overlay({
 
   // Suscripción Realtime.
   useEffect(() => {
+    const activeTimers = timers.current;
     const channel = supabase
       .channel("overlay-challenges")
       .on(
@@ -194,7 +193,7 @@ export default function Overlay({
 
     return () => {
       supabase.removeChannel(channel);
-      timers.current.forEach(clearTimeout);
+      activeTimers.forEach(clearTimeout);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -208,6 +207,7 @@ export default function Overlay({
       type: "progress",
       quest: "Inflige daño a oponentes con fusiles de asalto",
       week: "Semana 3",
+      from: 10,
       to: 40,
       target: 100,
     });
@@ -217,6 +217,7 @@ export default function Overlay({
       type: "completed",
       quest: "Visita los 7 campamentos piratas en una sola partida",
       week: "Semana 3",
+      from: 6,
       to: 7,
       target: 7,
     });
@@ -226,6 +227,7 @@ export default function Overlay({
       type: "meta",
       quest: "Completa todos los desafíos de la semana",
       week: "Semana 3",
+      from: 6,
       to: 7,
       target: 7,
     });
@@ -251,7 +253,7 @@ export default function Overlay({
     };
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [current?.key, phase]);
+  }, [current, phase]);
 
   if (!current) return <style>{styles}</style>;
 
@@ -269,7 +271,7 @@ export default function Overlay({
     <>
       <style>{styles}</style>
       <div className="ov-root">
-        <div className={`ov-card ov-${current.type} ov-${phase}`}>
+        <div key={current.key} className={`ov-card ov-${current.type} ov-${phase}`}>
           <div className="ov-badge">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={icon} alt="" className="ov-badge-img" />
@@ -306,96 +308,107 @@ html, body { background: transparent !important; margin: 0; }
   inset: 0;
   pointer-events: none;
   display: flex;
-  justify-content: flex-end;
+  justify-content: flex-start;
   align-items: flex-start;
-  padding: 48px;
+  padding: 46px;
   overflow: hidden;
-  font-family: var(--font-geist-sans), Arial, Helvetica, sans-serif;
+  font-family: var(--font-body), "Barlow Semi Condensed", Arial, Helvetica, sans-serif;
+  color: #ffffff;
 }
 
 .ov-card {
   position: relative;
   display: flex;
   align-items: center;
-  gap: 18px;
-  min-width: 460px;
-  max-width: 680px;
-  padding: 16px 24px 16px 18px;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #1b4f9c 0%, #0e2a5c 55%, #0a1733 100%);
-  border: 2px solid #7ccafa;
+  gap: 14px;
+  width: min(700px, 54vw);
+  min-width: 440px;
+  padding: 12px 18px 13px 14px;
+  border-radius: 8px;
+  background: linear-gradient(105deg, rgba(8,42,86,0.96) 0%, rgba(16,86,150,0.92) 58%, rgba(20,120,110,0.88) 100%);
+  border: 1px solid rgba(150, 200, 248, 0.42);
+  border-left: 4px solid #bfe6ff;
   box-shadow:
-    0 0 0 2px rgba(124, 202, 250, 0.25),
-    0 12px 40px rgba(0, 0, 0, 0.55),
-    0 0 60px rgba(60, 160, 255, 0.5);
+    0 10px 28px rgba(0, 0, 0, 0.42),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
   overflow: hidden;
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
 }
 .ov-completed {
-  background: linear-gradient(135deg, #157a3e 0%, #0d3d22 55%, #07210f 100%);
-  border-color: #7ef5a8;
-  box-shadow: 0 0 0 2px rgba(126,245,168,0.3), 0 12px 40px rgba(0,0,0,0.55), 0 0 60px rgba(60,220,120,0.5);
+  background: linear-gradient(105deg, rgba(8,42,86,0.96) 0%, rgba(15,93,96,0.92) 58%, rgba(20,120,76,0.9) 100%);
+  border-color: rgba(126,245,168,0.48);
+  border-left-color: #39d98a;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.42),
+    0 0 44px rgba(57,217,138,0.28),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 .ov-meta {
-  background: linear-gradient(135deg, #a9791a 0%, #5e3f08 55%, #2e2102 100%);
-  border-color: #ffd76b;
-  box-shadow: 0 0 0 2px rgba(255,215,107,0.3), 0 12px 40px rgba(0,0,0,0.55), 0 0 60px rgba(255,190,60,0.5);
+  background: linear-gradient(105deg, rgba(8,42,86,0.96) 0%, rgba(86,64,10,0.92) 58%, rgba(150,100,18,0.9) 100%);
+  border-color: rgba(255,210,60,0.52);
+  border-left-color: #ffd23c;
+  box-shadow:
+    0 10px 28px rgba(0, 0, 0, 0.42),
+    0 0 48px rgba(255,210,60,0.32),
+    inset 0 1px 0 rgba(255, 255, 255, 0.16);
 }
 
 .ov-badge {
   flex-shrink: 0;
-  width: 58px;
-  height: 58px;
+  width: 46px;
+  height: 46px;
   display: grid;
   place-items: center;
-  filter: drop-shadow(0 0 10px rgba(120, 200, 255, 0.9));
+  filter: drop-shadow(0 4px 8px rgba(0,0,0,0.35));
   animation: ovPulse 1.6s ease-in-out infinite;
 }
-.ov-completed .ov-badge { filter: drop-shadow(0 0 10px rgba(126,245,168,0.9)); }
-.ov-meta .ov-badge { filter: drop-shadow(0 0 10px rgba(255,200,80,0.9)); }
 .ov-badge-img { width: 100%; height: 100%; object-fit: contain; }
 
-.ov-text { flex: 1; min-width: 0; display: grid; gap: 6px; z-index: 1; }
+.ov-text { flex: 1; min-width: 0; display: grid; gap: 7px; z-index: 1; }
 .ov-eyebrow {
-  font-weight: 800;
-  font-size: 14px;
-  letter-spacing: 1.5px;
+  font-family: var(--font-title), "Arial Narrow", Impact, sans-serif;
+  font-weight: 700;
+  font-size: 18px;
+  line-height: 0.95;
+  letter-spacing: 0.8px;
   text-transform: uppercase;
-  color: #aee3ff;
+  color: #bfe6ff;
   text-shadow: 0 2px 4px rgba(0,0,0,0.6);
 }
-.ov-completed .ov-eyebrow { color: #b9ffd0; }
-.ov-meta .ov-eyebrow { color: #ffe9a8; }
+.ov-completed .ov-eyebrow { color: #7ef5a8; }
+.ov-meta .ov-eyebrow { color: #ffd23c; }
 .ov-quest {
-  font-weight: 900;
-  font-size: 19px;
-  line-height: 1.1;
-  text-transform: uppercase;
+  font-weight: 500;
+  font-size: 22px;
+  line-height: 1.12;
   color: #ffffff;
   text-shadow: 0 2px 6px rgba(0,0,0,0.7);
 }
 
 .ov-bar {
-  margin-top: 2px;
-  height: 10px;
-  border-radius: 6px;
-  background: rgba(0,0,0,0.35);
+  height: 8px;
+  border-radius: 999px;
+  background: rgba(2,14,36,0.6);
   box-shadow: inset 0 1px 3px rgba(0,0,0,0.5);
   overflow: hidden;
 }
 .ov-bar-fill {
   height: 100%;
-  border-radius: 6px;
-  background: linear-gradient(90deg, #7ccafa, #1c74e3);
-  box-shadow: 0 0 10px rgba(124,202,250,0.8);
+  border-radius: 999px;
+  background: linear-gradient(90deg, #cdecff 0%, #74c2ff 100%);
+  transition: width 0.12s linear;
 }
-.ov-completed .ov-bar-fill { background: linear-gradient(90deg, #7ef5a8, #16a34a); box-shadow: 0 0 10px rgba(126,245,168,0.8); }
-.ov-meta .ov-bar-fill { background: linear-gradient(90deg, #ffe9a8, #e0a014); box-shadow: 0 0 10px rgba(255,200,80,0.8); }
+.ov-completed .ov-bar-fill { background: linear-gradient(90deg, #6ff0ad 0%, #1faa63 100%); }
+.ov-meta .ov-bar-fill { background: linear-gradient(90deg, #ffe27a 0%, #f5a623 100%); }
 
 .ov-count {
   flex-shrink: 0;
-  align-self: flex-end;
-  font-weight: 900;
-  font-size: 17px;
+  align-self: center;
+  font-family: var(--font-title), "Arial Narrow", Impact, sans-serif;
+  font-weight: 700;
+  font-size: 27px;
+  line-height: 0.95;
   color: #cfe6ff;
   text-shadow: 0 2px 4px rgba(0,0,0,0.7);
   text-align: right;
@@ -408,11 +421,19 @@ html, body { background: transparent !important; margin: 0; }
   position: absolute;
   top: 0;
   left: -60%;
-  width: 40%;
+  width: 46%;
   height: 100%;
   transform: skewX(-20deg);
-  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.3), transparent);
-  animation: ovShine 1.1s ease-out 0.4s 1 both;
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.12) 24%, rgba(255,255,255,0.62) 50%, rgba(255,255,255,0.12) 76%, transparent 100%);
+  filter: blur(0.2px);
+  mix-blend-mode: screen;
+  animation: ovShine 1.18s ease-out 0.32s 1 both;
+}
+.ov-completed .ov-shine {
+  background: linear-gradient(90deg, transparent 0%, rgba(126,245,168,0.2) 22%, rgba(230,255,240,0.74) 50%, rgba(126,245,168,0.24) 78%, transparent 100%);
+}
+.ov-meta .ov-shine {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,210,60,0.24) 22%, rgba(255,246,190,0.8) 50%, rgba(255,210,60,0.28) 78%, transparent 100%);
 }
 
 .ov-enter { animation: ovIn ${ENTER_MS}ms cubic-bezier(0.16, 1, 0.3, 1) both; }
@@ -420,13 +441,13 @@ html, body { background: transparent !important; margin: 0; }
 .ov-leaving { animation: ovOut ${EXIT_MS}ms cubic-bezier(0.7, 0, 0.84, 0) both; }
 
 @keyframes ovIn {
-  0%   { transform: translateX(130%) scale(0.96); opacity: 0; }
-  70%  { transform: translateX(-2%)  scale(1.02); opacity: 1; }
+  0%   { transform: translateX(-130%) scale(0.96); opacity: 0; }
+  70%  { transform: translateX(2%)    scale(1.02); opacity: 1; }
   100% { transform: translateX(0)    scale(1);    opacity: 1; }
 }
 @keyframes ovOut {
   0%   { transform: translateX(0)    scale(1);    opacity: 1; }
-  100% { transform: translateX(130%) scale(0.96); opacity: 0; }
+  100% { transform: translateX(-130%) scale(0.96); opacity: 0; }
 }
 @keyframes ovShine { 0% { left: -60%; } 100% { left: 130%; } }
 @keyframes ovPulse {

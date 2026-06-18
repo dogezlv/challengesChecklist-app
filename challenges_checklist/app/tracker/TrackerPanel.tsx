@@ -1486,6 +1486,9 @@ export default function TrackerPanel({
             // partida (el RPC lo refuerza; aquí se bloquea el botón)
             const isDifferent =
               c.kind === "progress" && c.match_scope === "different_matches";
+            const isDamageChallenge = (c.challenge_rules ?? []).some(
+              (r) => r.action_type?.code === "damage"
+            );
             const addedThisMatch =
               !!activeMatch &&
               (c.challenge_rules ?? []).some((r) =>
@@ -1595,7 +1598,7 @@ export default function TrackerPanel({
                     {/* los desafíos "basados en opciones" (varios lugares,
                         lugares distintos…) no usan barra ni ±1: ¿qué opción
                         restaría un −1? Se manejan con sus chips o el reset.
-                        En partidas diferentes solo se suma de a 1. */}
+                        En partidas diferentes se ajusta de a 1. */}
                     {!isOptionBased && !isDifferent && (
                     <input
                       type="range"
@@ -1712,7 +1715,7 @@ export default function TrackerPanel({
                           +1
                         </button>
                       )}
-                      {!isOptionBased && !isDifferent && (
+                      {!isOptionBased && !isDamageChallenge && (
                       <button
                         disabled={locked || current <= 0}
                         onClick={() => increaseProgress(c, -1)}
