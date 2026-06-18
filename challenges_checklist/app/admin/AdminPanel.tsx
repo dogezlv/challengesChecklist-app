@@ -1,9 +1,10 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
 import { createClient } from "@/utils/supabase/client";
 import LogoutButton from "../components/LogoutButton";
+import TopNav from "../components/TopNav";
+import { contentWrap, fnt, fs, pageMain, panel, titleFont, yellowButton } from "../lib/theme";
 
 type Row = {
   id: string;
@@ -306,9 +307,7 @@ export default function AdminPanel({
     else location.reload();
   }
   const card: React.CSSProperties = {
-    background: "#111827",
-    border: "1px solid #374151",
-    borderRadius: 16,
+    ...panel,
     padding: 20,
     color: "white",
   };
@@ -317,13 +316,14 @@ export default function AdminPanel({
     display: "grid",
     gridTemplateColumns: "repeat(auto-fit, minmax(320px, 1fr))",
     gap: 20,
+    marginTop: 16,
   };
 
   const input: React.CSSProperties = {
     padding: "10px 35px 10px 10px", // Más espacio a la derecha para tu flecha personalizada
     borderRadius: 8,
-    border: "1px solid #4b5563",
-    background: "#020617",
+    border: `1px solid ${fnt.border}`,
+    background: "rgba(4, 24, 58, 0.55)",
     color: "white",
     width: "100%",                  // Se adapta al tamaño del div contenedor
     colorScheme: "dark",            // Hace que las opciones desplegables sean oscuras en navegadores modernos
@@ -334,39 +334,47 @@ export default function AdminPanel({
   };
 
   const button: React.CSSProperties = {
-    padding: 10,
-    borderRadius: 8,
-    border: "none",
-    background: "#2563eb",
-    color: "white",
-    cursor: "pointer",
+    ...yellowButton,
+    padding: 11,
+    width: "100%",
   };
 
   return (
-    <main style={{ minHeight: "100vh", background: "#020617", padding: 40 }}>
-      <header
+    <main style={pageMain}>
+      <div style={contentWrap}>
+      <TopNav
+        tabs={[
+          { label: "Misiones", href: "/" },
+          { label: "Panel", href: "/tracker" },
+          { label: "Admin", href: "/admin", active: true },
+        ]}
+        right={<LogoutButton />}
+      />
+
+      <h1
         style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
-          gap: 12,
+          fontFamily: titleFont,
+          color: "white",
+          fontSize: fs(34, 64),
+          margin: "0 0 4px",
+          textTransform: "uppercase",
+          letterSpacing: 1,
+          fontWeight: 700,
         }}
       >
-        <h1 style={{ color: "white", fontSize: 36, margin: 0 }}>Panel Admin</h1>
-        <nav style={{ display: "flex", gap: 14, alignItems: "center" }}>
-          <Link href="/" style={{ color: "#60a5fa", fontWeight: 700 }}>
-            Checklist
-          </Link>
-          <Link href="/tracker" style={{ color: "#60a5fa", fontWeight: 700 }}>
-            Panel de supervisión
-          </Link>
-          <LogoutButton />
-        </nav>
-      </header>
+        Panel Admin
+      </h1>
 
       {message && (
-        <p style={{ background: "#7f1d1d", color: "white", padding: 12 }}>
+        <p
+          style={{
+            background: "rgba(225, 73, 58, 0.85)",
+            color: "white",
+            padding: 12,
+            borderRadius: 8,
+            marginTop: 12,
+          }}
+        >
           {message}
         </p>
       )}
@@ -620,6 +628,7 @@ export default function AdminPanel({
             <button style={button}>Crear location</button>
           </form>
         </section>
+      </div>
       </div>
     </main>
   );

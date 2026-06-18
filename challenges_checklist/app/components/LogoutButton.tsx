@@ -17,14 +17,14 @@ export default function LogoutButton({ style }: { style?: React.CSSProperties })
     <button
       onClick={logout}
       style={{
-        padding: "6px 12px",
-        borderRadius: 8,
-        border: "1px solid #7f1d1d",
-        background: "transparent",
-        color: "#fca5a5",
+        padding: "8px 14px",
+        borderRadius: 6,
+        border: "none",
+        background: "linear-gradient(180deg, #e1493a 0%, #b3271a 100%)",
+        color: "white",
         cursor: "pointer",
         fontWeight: 700,
-        fontSize: 13,
+        fontSize: 14,
         ...style,
       }}
     >

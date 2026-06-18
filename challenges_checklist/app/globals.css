@@ -21,7 +21,40 @@
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  /* Fondo "Season X": azul brillante con brillo radial arriba (igual que
+     pageBackground en app/lib/theme.ts). Las páginas pintan su propio fondo,
+     esto cubre los bordes/overscroll. */
+  background: #0c55a8;
+  color: #ffffff;
+  /* Texto descriptivo: Burbank Small Medium (public/, vía next/font/local).
+     (El overlay fija su propia fuente inline, así que no se ve afectado.) */
+  font-family: var(--font-body), "Barlow Semi Condensed", Arial, Helvetica,
+    sans-serif;
+  font-weight: 500;
+}
+
+/* Los controles de formulario no heredan la fuente por defecto: forzarlo para
+   que botones/inputs usen Burbank Small Medium como el resto del cuerpo. */
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* Encabezados: Burbank Big Condensed Black, SIEMPRE en mayúsculas.
+   El overlay no usa elementos de encabezado, así que no se ve afectado. */
+h1,
+h2,
+h3,
+h4,
+h5,
+h6 {
+  font-family: var(--font-title), "Arial Narrow", Impact, sans-serif;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  /* Burbank deja mucho hueco bajo la línea base; line-height ajustado para
+     que el texto quede ópticamente centrado y no "flote" hacia arriba. */
+  line-height: 0.95;
 }

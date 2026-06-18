@@ -1,7 +1,6 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import FortniteIcon from "../components/FortniteIcon";
@@ -9,6 +8,8 @@ import LogoutButton from "../components/LogoutButton";
 import MissionCard from "../components/MissionCard";
 import SearchBox from "../components/SearchBox";
 import WeekTabs from "../components/WeekTabs";
+import TopNav from "../components/TopNav";
+import { contentWrap, fnt, fs, pageMain, titleFont, yellowButton } from "../lib/theme";
 import type { Season, Week } from "../lib/selection";
 import {
   ACTION_EMOJI,
@@ -784,23 +785,19 @@ export default function TrackerPanel({
 
   // ---- estilos ----
   const card: React.CSSProperties = {
-    background: "#0d1b33",
-    border: "1px solid #1c74e3",
-    borderRadius: 14,
+    background: fnt.panel,
+    border: `1px solid ${fnt.border}`,
+    borderRadius: 12,
     padding: 18,
     color: "white",
+    backdropFilter: "blur(2px)",
+    WebkitBackdropFilter: "blur(2px)",
   };
   const button: React.CSSProperties = {
-    padding: "10px 16px",
-    borderRadius: 8,
-    border: "none",
-    background: "linear-gradient(180deg, #7ccafa 0%, #1c74e3 100%)",
-    color: "white",
-    cursor: "pointer",
-    fontWeight: 800,
-    textTransform: "uppercase",
-    fontSize: 13,
-    letterSpacing: 0.5,
+    ...yellowButton,
+    padding: `${fs(9, 14)} ${fs(14, 24)}`,
+    borderRadius: 6,
+    fontSize: fs(14, 21),
   };
   // chips uniformes: todos miden lo mismo dentro de una cuadrícula fija,
   // así el panel no cambia de tamaño ni baila al (de)seleccionar
@@ -817,10 +814,10 @@ export default function TrackerPanel({
     minHeight: 40,
     height: "100%", // ocupa toda la celda: la fila crece si un texto es largo
     padding: "8px 12px",
-    borderRadius: 10,
-    border: "1px solid #2c4a7c",
-    background: "#10254a",
-    color: "#cfe6ff",
+    borderRadius: 8,
+    border: `1px solid ${fnt.borderSoft}`,
+    background: "rgba(8, 40, 86, 0.5)",
+    color: fnt.textDim,
     cursor: "pointer",
     fontSize: 13,
     lineHeight: 1.25,
@@ -834,21 +831,21 @@ export default function TrackerPanel({
     fontWeight: 800,
     letterSpacing: 1,
     textTransform: "uppercase",
-    color: "#5d8fc4",
+    color: fnt.textMuted,
   };
   const toggleOn: React.CSSProperties = {
     ...toggleBase,
-    background: "linear-gradient(180deg, #7ccafa 0%, #1c74e3 100%)",
-    border: "1px solid #7ccafa",
-    color: "white",
-    fontWeight: 700,
+    background: "linear-gradient(180deg, #eaf7ff 0%, #9fd4ff 100%)",
+    border: "1px solid #bfe6ff",
+    color: "#0a3e85",
+    fontWeight: 800,
   };
   const groupLabel: React.CSSProperties = {
     fontSize: 11,
     fontWeight: 800,
     letterSpacing: 1,
     textTransform: "uppercase",
-    color: "#7ccafa",
+    color: "#bfe6ff",
   };
 
   // ---- helpers de chips: subgrupos con texto y separador SOLO cuando
@@ -907,105 +904,104 @@ export default function TrackerPanel({
     );
   }
 
+  const navTabs = [
+    { label: "Misiones", href: "/" },
+    { label: "Panel", href: "/tracker", active: true },
+    ...(isAdmin ? [{ label: "Admin", href: "/admin" }] : []),
+  ];
+
   return (
-    <main
-      style={{
-        minHeight: "100vh",
-        background: "linear-gradient(180deg, #050d1f 0%, #0a1a38 60%, #102448 100%)",
-        backgroundAttachment: "fixed",
-        padding: 28,
-      }}
-    >
-      {/* Encabezado */}
+    <main style={pageMain}>
+      <div style={contentWrap}>
+      {/* Barra de navegación */}
+      <TopNav
+        tabs={navTabs}
+        right={
+          <>
+            {isAdmin &&
+              (confirmReset ? (
+                <>
+                  <button
+                    onClick={resetAll}
+                    disabled={resetting}
+                    style={{
+                      padding: "6px 12px",
+                      borderRadius: 6,
+                      border: "none",
+                      background: fnt.red,
+                      color: "white",
+                      fontWeight: 700,
+                      fontSize: 13,
+                      cursor: resetting ? "not-allowed" : "pointer",
+                      opacity: resetting ? 0.6 : 1,
+                    }}
+                  >
+                    {resetting ? "Reiniciando…" : "¿Seguro? Reiniciar todo"}
+                  </button>
+                  <button
+                    onClick={() => setConfirmReset(false)}
+                    disabled={resetting}
+                    style={{
+                      background: "transparent",
+                      border: "none",
+                      color: fnt.textDim,
+                      fontWeight: 700,
+                      cursor: "pointer",
+                    }}
+                  >
+                    Cancelar
+                  </button>
+                </>
+              ) : (
+                <button
+                  onClick={() => setConfirmReset(true)}
+                  style={{
+                    padding: "8px 14px",
+                    borderRadius: 6,
+                    background: "linear-gradient(180deg, #e1493a 0%, #b3271a 100%)",
+                    border: "none",
+                    color: "white",
+                    fontWeight: 700,
+                    fontSize: 14,
+                    cursor: "pointer",
+                  }}
+                >
+                  Reiniciar todo
+                </button>
+              ))}
+            <LogoutButton />
+          </>
+        }
+      />
+
+      {/* Título */}
       <header
         style={{
           display: "flex",
           alignItems: "center",
-          justifyContent: "space-between",
-          flexWrap: "wrap",
           gap: 12,
-          marginBottom: 18,
+          marginBottom: 16,
         }}
       >
-        <div style={{ display: "flex", alignItems: "center", gap: 12 }}>
-          <FortniteIcon code="week_banner" emoji="🗒️" size={52} />
-          <div>
-            <h1
-              style={{
-                color: "white",
-                fontSize: 26,
-                margin: 0,
-                textTransform: "uppercase",
-                letterSpacing: 1,
-                fontWeight: 900,
-              }}
-            >
-              Panel de supervisión
-            </h1>
-            <span style={{ color: "#7ccafa", fontSize: 13 }}>
-              Registro global de eventos · toda la temporada
-            </span>
-          </div>
+        <FortniteIcon code="week_banner" emoji="🗒️" size={48} />
+        <div>
+          <h1
+            style={{
+              fontFamily: titleFont,
+              color: "white",
+              fontSize: fs(32, 62),
+              margin: 0,
+              textTransform: "uppercase",
+              letterSpacing: 1,
+              fontWeight: 700,
+            }}
+          >
+            Panel de supervisión
+          </h1>
+          <span style={{ color: fnt.textDim, fontSize: fs(13, 20) }}>
+            Registro global de eventos · toda la temporada
+          </span>
         </div>
-        <nav style={{ display: "flex", gap: 14, alignItems: "center" }}>
-          <Link href="/" style={{ color: "#7ccafa", fontWeight: 700 }}>
-            Checklist
-          </Link>
-          {isAdmin && (
-            <Link href="/admin" style={{ color: "#7ccafa", fontWeight: 700 }}>
-              Admin
-            </Link>
-          )}
-          {isAdmin &&
-            (confirmReset ? (
-              <>
-                <button
-                  onClick={resetAll}
-                  disabled={resetting}
-                  style={{
-                    padding: "6px 12px",
-                    borderRadius: 8,
-                    border: "none",
-                    background: "#b91c1c",
-                    color: "white",
-                    fontWeight: 700,
-                    fontSize: 13,
-                    cursor: resetting ? "not-allowed" : "pointer",
-                    opacity: resetting ? 0.6 : 1,
-                  }}
-                >
-                  {resetting ? "Reiniciando…" : "¿Seguro? Reiniciar todo"}
-                </button>
-                <button
-                  onClick={() => setConfirmReset(false)}
-                  disabled={resetting}
-                  style={{
-                    background: "transparent",
-                    border: "none",
-                    color: "#9fc9f5",
-                    fontWeight: 700,
-                    cursor: "pointer",
-                  }}
-                >
-                  Cancelar
-                </button>
-              </>
-            ) : (
-              <button
-                onClick={() => setConfirmReset(true)}
-                style={{
-                  background: "transparent",
-                  border: "none",
-                  color: "#f87171",
-                  fontWeight: 700,
-                  cursor: "pointer",
-                }}
-              >
-                Reiniciar todo
-              </button>
-            ))}
-          <LogoutButton />
-        </nav>
       </header>
 
       {/* Control de partida: viaja fijo arriba dentro de una FRANJA a todo el
@@ -1018,21 +1014,23 @@ export default function TrackerPanel({
           position: "sticky",
           top: 0,
           zIndex: 50,
-          margin: "0 -28px 18px",
-          padding: "16px 28px 22px",
-          background: "rgba(4, 10, 24, 0.88)",
+          margin: "0 -26px 18px",
+          padding: "16px 26px 22px",
+          background: "rgba(5, 30, 66, 0.9)",
           backdropFilter: "blur(10px)",
           WebkitBackdropFilter: "blur(10px)",
-          borderBottom: "3px solid rgba(124, 202, 250, 0.45)",
-          boxShadow: "0 10px 24px rgba(0, 0, 0, 0.45)",
+          borderBottom: `3px solid ${fnt.border}`,
+          boxShadow: "0 10px 24px rgba(0, 0, 0, 0.4)",
         }}
       >
       <section
         style={{
           ...card,
           background:
-            "linear-gradient(120deg, #2a1458 0%, #1b2a6e 55%, #0e3f8a 100%)",
-          border: activeMatch ? "1px solid #34d399" : "1px solid #7ccafa",
+            "linear-gradient(120deg, rgba(16,70,140,0.85) 0%, rgba(20,100,120,0.8) 100%)",
+          border: activeMatch
+            ? `1px solid ${fnt.green}`
+            : `1px solid ${fnt.border}`,
           display: "flex",
           alignItems: "center",
           gap: 16,
@@ -1108,11 +1106,12 @@ export default function TrackerPanel({
               >
                 <h2
                   style={{
+                    fontFamily: titleFont,
                     margin: 0,
-                    fontSize: 17,
+                    fontSize: fs(20, 36),
                     textTransform: "uppercase",
                     letterSpacing: 1,
-                    fontWeight: 900,
+                    fontWeight: 700,
                   }}
                 >
                   {ACTION_EMOJI[cat.actionCode] ?? "▶️"} {cat.actionName}
@@ -1430,12 +1429,13 @@ export default function TrackerPanel({
           {showAll && (
             <h3
               style={{
-                color: "#7ccafa",
+                fontFamily: titleFont,
+                color: "#bfe6ff",
                 margin: "8px 0 0",
-                fontSize: 16,
+                fontSize: 19,
                 textTransform: "uppercase",
                 letterSpacing: 1,
-                fontWeight: 900,
+                fontWeight: 400,
               }}
             >
               {week.display_name ?? `Semana ${week.week_number}`}
@@ -1469,15 +1469,26 @@ export default function TrackerPanel({
             const optionRules = (c.challenge_rules ?? []).filter((r) =>
               ruleLabel(r)
             );
+            // "basado en opciones": el progreso viene de eventos discretos
+            // (varios objetivos/lugares, o lugares con nombre distintos), no
+            // de un acumulador numérico. En estos NO tiene sentido el ±1 ni la
+            // barra/cantidad manual (¿qué opción restaría un −1?), ni cuando
+            // ya está completado. Se controla solo con sus chips o el reset.
+            const isOptionBased =
+              (optionRules.length >= 2 && c.unit !== "value") ||
+              c.unit === "distinct_location";
             const showOptionChips =
+              isOptionBased &&
               !c.is_completed &&
               !locked &&
-              optionRules.length >= 2 &&
-              c.unit !== "value";
+              optionRules.length >= 2;
             // partidas diferentes: solo se avanza de 1 en 1 y una vez por
             // partida (el RPC lo refuerza; aquí se bloquea el botón)
             const isDifferent =
               c.kind === "progress" && c.match_scope === "different_matches";
+            const isDamageChallenge = (c.challenge_rules ?? []).some(
+              (r) => r.action_type?.code === "damage"
+            );
             const addedThisMatch =
               !!activeMatch &&
               (c.challenge_rules ?? []).some((r) =>
@@ -1527,9 +1538,9 @@ export default function TrackerPanel({
                               : (ruleLabel(r) ?? "")
                           }
                           style={{
-                            minHeight: 34,
+                            minHeight: fs(36, 50),
                             height: "100%",
-                            padding: "6px 10px",
+                            padding: `${fs(7, 11)} ${fs(10, 16)}`,
                             borderRadius: 8,
                             border: done
                               ? "1px solid #16a34a"
@@ -1538,7 +1549,7 @@ export default function TrackerPanel({
                             color: done ? "#7ef5a8" : "#cfe6ff",
                             cursor: chipDisabled ? "default" : "pointer",
                             opacity: !done && matchBlocked ? 0.5 : 1,
-                            fontSize: 12,
+                            fontSize: fs(13, 19),
                             fontWeight: 600,
                             lineHeight: 1.25,
                             width: "100%",
@@ -1555,13 +1566,13 @@ export default function TrackerPanel({
                   </div>
                 )}
                 {c.kind === "simple" ? (
-                  <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     {/* descompletar siempre se permite; completar exige partida */}
                     <button
                       onClick={() => toggleSimpleChallenge(c)}
                       disabled={c.is_completed ? locked : addBlocked}
                       style={{
-                        padding: "6px 12px",
+                        padding: `${fs(8, 12)} ${fs(14, 22)}`,
                         borderRadius: 8,
                         border: "1px solid #2c4a7c",
                         background: c.is_completed ? "#10254a" : "#1c74e3",
@@ -1570,24 +1581,25 @@ export default function TrackerPanel({
                           ? "not-allowed"
                           : "pointer",
                         opacity: (c.is_completed ? locked : addBlocked) ? 0.5 : 1,
-                        fontSize: 12,
+                        fontSize: fs(13, 19),
                         fontWeight: 700,
                       }}
                     >
                       {c.is_completed ? "Marcar como pendiente" : "Completar"}
                     </button>
                     {matchBlocked && !c.is_completed && (
-                      <span style={{ color: "#fbbf24", fontSize: 12 }}>
+                      <span style={{ color: "#fbbf24", fontSize: fs(12, 17) }}>
                         ⚠ Completar requiere partida activa
                       </span>
                     )}
                   </div>
                 ) : (
-                  <div style={{ display: "grid", gap: 6 }}>
-                    {/* con botones por opción no tiene sentido la barra
-                        interactiva ni la cantidad manual; en partidas
-                        diferentes tampoco: solo ±1 */}
-                    {!showOptionChips && !isDifferent && (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {/* los desafíos "basados en opciones" (varios lugares,
+                        lugares distintos…) no usan barra ni ±1: ¿qué opción
+                        restaría un −1? Se manejan con sus chips o el reset.
+                        En partidas diferentes se ajusta de a 1. */}
+                    {!isOptionBased && !isDifferent && (
                     <input
                       type="range"
                       min={0}
@@ -1617,12 +1629,13 @@ export default function TrackerPanel({
                       }
                       style={{
                         width: "100%",
+                        height: fs(8, 14),
                         accentColor: c.is_completed ? "#22c55e" : "#3b82f6",
                       }}
                     />
                     )}
-                    <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
-                      {!showOptionChips && !isDifferent && (
+                    <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
+                      {!isOptionBased && !isDifferent && (
                         <>
                       <input
                         type="number"
@@ -1636,9 +1649,9 @@ export default function TrackerPanel({
                           }))
                         }
                         style={{
-                          padding: "6px 8px",
-                          width: 90,
-                          fontSize: 13,
+                          padding: `${fs(7, 11)} ${fs(9, 14)}`,
+                          width: fs(96, 150),
+                          fontSize: fs(14, 20),
                           borderRadius: 8,
                           border: "1px solid #2c4a7c",
                           background: "#10254a",
@@ -1656,7 +1669,7 @@ export default function TrackerPanel({
                           increaseProgress(c, Math.floor(n));
                         }}
                         style={{
-                          padding: "6px 12px",
+                          padding: `${fs(8, 12)} ${fs(12, 20)}`,
                           borderRadius: 8,
                           border: "none",
                           background: "#1c74e3",
@@ -1666,7 +1679,7 @@ export default function TrackerPanel({
                               ? "not-allowed"
                               : "pointer",
                           opacity: c.is_completed || addBlocked ? 0.5 : 1,
-                          fontSize: 12,
+                          fontSize: fs(13, 19),
                           fontWeight: 700,
                         }}
                       >
@@ -1674,7 +1687,7 @@ export default function TrackerPanel({
                       </button>
                         </>
                       )}
-                      {!showOptionChips && isDifferent && (
+                      {!isOptionBased && isDifferent && (
                         <button
                           disabled={
                             c.is_completed || addBlocked || addedThisMatch
@@ -1682,7 +1695,7 @@ export default function TrackerPanel({
                           onClick={() => increaseProgress(c, 1)}
                           title="Suma 1 (máximo una vez por partida)"
                           style={{
-                            padding: "6px 12px",
+                            padding: `${fs(8, 12)} ${fs(14, 22)}`,
                             borderRadius: 8,
                             border: "none",
                             background: "#1c74e3",
@@ -1695,20 +1708,20 @@ export default function TrackerPanel({
                               c.is_completed || addBlocked || addedThisMatch
                                 ? 0.5
                                 : 1,
-                            fontSize: 12,
+                            fontSize: fs(13, 19),
                             fontWeight: 700,
                           }}
                         >
                           +1
                         </button>
                       )}
-                      {!showOptionChips && (
+                      {!isOptionBased && !isDamageChallenge && (
                       <button
                         disabled={locked || current <= 0}
                         onClick={() => increaseProgress(c, -1)}
                         title="Reducir 1"
                         style={{
-                          padding: "6px 12px",
+                          padding: `${fs(8, 12)} ${fs(12, 20)}`,
                           borderRadius: 8,
                           border: "1px solid #2c4a7c",
                           background: "#10254a",
@@ -1716,7 +1729,7 @@ export default function TrackerPanel({
                           cursor:
                             locked || current <= 0 ? "not-allowed" : "pointer",
                           opacity: locked || current <= 0 ? 0.5 : 1,
-                          fontSize: 12,
+                          fontSize: fs(13, 19),
                           fontWeight: 700,
                         }}
                       >
@@ -1724,7 +1737,7 @@ export default function TrackerPanel({
                       </button>
                       )}
                       {isDifferent && addedThisMatch && !c.is_completed && (
-                        <span style={{ color: "#7ef5a8", fontSize: 12 }}>
+                        <span style={{ color: "#7ef5a8", fontSize: fs(12, 17) }}>
                           ✔ Ya se sumó en esta partida
                         </span>
                       )}
@@ -1733,26 +1746,29 @@ export default function TrackerPanel({
                           disabled={locked}
                           onClick={() => resetProgress(c)}
                           style={{
-                            padding: "6px 12px",
+                            padding: `${fs(8, 12)} ${fs(12, 20)}`,
                             borderRadius: 8,
-                            border: "1px solid #7f1d1d",
-                            background: "transparent",
-                            color: "#fca5a5",
+                            border: "none",
+                            background:
+                              "linear-gradient(180deg, #e1493a 0%, #b3271a 100%)",
+                            color: "white",
                             cursor: locked ? "not-allowed" : "pointer",
                             opacity: locked ? 0.5 : 1,
-                            fontSize: 12,
+                            fontSize: fs(13, 19),
                             fontWeight: 700,
                           }}
                         >
                           {c.is_completed ? "Descompletar" : "Quitar progreso"}
                         </button>
                       )}
-                      {matchBlocked && (
-                        <span style={{ color: "#fbbf24", fontSize: 12 }}>
-                          ⚠{" "}
-                          {showOptionChips
-                            ? "Registrar requiere partida activa"
-                            : "Aumentar requiere partida activa"}
+                      {matchBlocked && showOptionChips && (
+                        <span style={{ color: "#fbbf24", fontSize: fs(12, 17) }}>
+                          ⚠ Registrar requiere partida activa
+                        </span>
+                      )}
+                      {matchBlocked && !isOptionBased && !c.is_completed && (
+                        <span style={{ color: "#fbbf24", fontSize: fs(12, 17) }}>
+                          ⚠ Aumentar requiere partida activa
                         </span>
                       )}
                     </div>
@@ -1774,6 +1790,7 @@ export default function TrackerPanel({
             </p>
           )}
       </section>
+      </div>
     </main>
   );
 }

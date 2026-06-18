@@ -5,7 +5,7 @@ import Overlay from "./Overlay";
 //
 // Parámetros (?clave=valor):
 //   season=<code>   solo notificar desafíos de esa temporada (por defecto: todas)
-//   duration=<ms>   tiempo visible de la notificación (por defecto 6000)
+//   duration=<ms>   tiempo visible de la notificación (por defecto 4500)
 //   test=1          muestra una notificación de demostración al cargar
 export default async function OverlayPage({
   searchParams,
@@ -17,7 +17,7 @@ export default async function OverlayPage({
     typeof params[k] === "string" ? (params[k] as string) : undefined;
 
   const seasonCode = str("season") ?? null;
-  const durationMs = Math.max(1000, Number(str("duration")) || 6000);
+  const durationMs = Math.max(1000, Number(str("duration")) || 4500);
   const test = str("test") === "1";
 
   return <Overlay seasonCode={seasonCode} durationMs={durationMs} test={test} />;
