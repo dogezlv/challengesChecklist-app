@@ -252,6 +252,8 @@ export default function TrackerPanel({
   const [busyRule, setBusyRule] = useState<string | null>(null);
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState("");
+  const [confirmReset, setConfirmReset] = useState(false);
+  const [resetting, setResetting] = useState(false);
 
   // re-sincroniza cuando el servidor manda otra temporada (ajuste de estado
   // durante el render comparando la prop anterior, sin efecto)
@@ -600,6 +602,17 @@ export default function TrackerPanel({
     loadChallenges();
   }
 
+  // solo admin: borra TODO el progreso de misiones y todas las partidas
+  async function resetAll() {
+    setResetting(true);
+    const { error } = await supabase.rpc("reset_all_progress");
+    setResetting(false);
+    setConfirmReset(false);
+    if (error) alert(error.message);
+    loadMatch();
+    loadChallenges();
+  }
+
   // ---- controles manuales (antes en la checklist pública) ----
   async function toggleSimpleChallenge(challenge: Challenge) {
     setChallenges((prev) =>
@@ -943,6 +956,54 @@ export default function TrackerPanel({
               Admin
             </Link>
           )}
+          {isAdmin &&
+            (confirmReset ? (
+              <>
+                <button
+                  onClick={resetAll}
+                  disabled={resetting}
+                  style={{
+                    padding: "6px 12px",
+                    borderRadius: 8,
+                    border: "none",
+                    background: "#b91c1c",
+                    color: "white",
+                    fontWeight: 700,
+                    fontSize: 13,
+                    cursor: resetting ? "not-allowed" : "pointer",
+                    opacity: resetting ? 0.6 : 1,
+                  }}
+                >
+                  {resetting ? "Reiniciando…" : "¿Seguro? Reiniciar todo"}
+                </button>
+                <button
+                  onClick={() => setConfirmReset(false)}
+                  disabled={resetting}
+                  style={{
+                    background: "transparent",
+                    border: "none",
+                    color: "#9fc9f5",
+                    fontWeight: 700,
+                    cursor: "pointer",
+                  }}
+                >
+                  Cancelar
+                </button>
+              </>
+            ) : (
+              <button
+                onClick={() => setConfirmReset(true)}
+                style={{
+                  background: "transparent",
+                  border: "none",
+                  color: "#f87171",
+                  fontWeight: 700,
+                  cursor: "pointer",
+                }}
+              >
+                Reiniciar todo
+              </button>
+            ))}
           <LogoutButton />
         </nav>
       </header>
