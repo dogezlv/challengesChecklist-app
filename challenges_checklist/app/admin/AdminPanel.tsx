@@ -349,6 +349,7 @@ export default function AdminPanel({
           { label: "Misiones", href: "/" },
           { label: "Panel", href: "/tracker" },
           { label: "Admin", href: "/admin", active: true },
+          { label: "Apuestas", href: "/admin/betting" },
         ]}
         right={<LogoutButton />}
       />

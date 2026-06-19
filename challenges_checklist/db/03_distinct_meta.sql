@@ -395,7 +395,7 @@ insert into public.challenges
   (description, kind, unit, match_scope, current_value, target_value,
    is_completed, week_id, is_meta)
 select
-  'Completa todos los desafíos de la semana para ganar la recompensa',
+  'Completa todos los desafíos de la semana para desbloquear los prestigios',
   'progress', 'count', 'any_match', 0,
   greatest((select count(distinct coalesce(c.line_id::text, c.id::text))
             from public.challenges c
