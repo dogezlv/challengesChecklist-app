@@ -162,15 +162,6 @@ const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
   ],
 };
 
-// Encola la secuencia completa de estilos públicos (igual que test=2 solo).
-function enqueuePublicStyleShowcase() {
-  const stamp = Date.now();
-  for (let i = 0; i < DEMO_NOTICES[2].length; i++) {
-    const demo = DEMO_NOTICES[2][i];
-    enqueue({ ...demo, key: `${demo.key}-${stamp}-${i}` });
-  }
-}
-
 export default function Overlay({
   seasonCode,
   durationMs,
@@ -251,6 +242,14 @@ export default function Overlay({
       q.push(n);
     }
     pump();
+  }
+
+  function enqueuePublicStyleShowcase() {
+    const stamp = Date.now();
+    for (let i = 0; i < DEMO_NOTICES[2].length; i++) {
+      const demo = DEMO_NOTICES[2][i];
+      enqueue({ ...demo, key: `${demo.key}-${stamp}-${i}` });
+    }
   }
 
   // Convierte una fila de la BD en notificación si representa un cambio nuevo.
