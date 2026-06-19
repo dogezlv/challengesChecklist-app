@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/app/lib/admin-auth";
 import { createServiceClient } from "@/app/lib/supabase-service";
-import { createPrediction, getValidTwitchTokens } from "@/app/lib/twitch/helix";
+import { createPrediction, ensurePredictionEventSub, getValidTwitchTokens } from "@/app/lib/twitch/helix";
 
 export async function POST(req: Request) {
   const auth = await requireAdmin();
@@ -38,6 +38,14 @@ export async function POST(req: Request) {
   }
 
   try {
+    const eventsub = await ensurePredictionEventSub(tokens.broadcaster_id);
+    if (eventsub.missingSecret) {
+      return NextResponse.json(
+        { error: "Falta TWITCH_EVENTSUB_SECRET en el servidor" },
+        { status: 500 }
+      );
+    }
+
     const prediction = await createPrediction(
       tokens,
       pool.title,
@@ -69,6 +77,7 @@ export async function POST(req: Request) {
       success: true,
       prediction_id: prediction.id,
       status: prediction.status,
+      eventsub,
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

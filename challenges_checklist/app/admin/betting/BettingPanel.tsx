@@ -40,6 +40,12 @@ type Pool = {
   betting_pool_outcomes?: Outcome[];
 };
 type WeekProgress = { week_id: string; week_number: number; pct: number };
+type EventSubStatus = {
+  callback: string;
+  configured: boolean;
+  progress: boolean;
+  lock: boolean;
+};
 
 const inputStyle: React.CSSProperties = {
   width: "100%",
@@ -71,6 +77,7 @@ export default function BettingPanel({
   const [broadcaster, setBroadcaster] = useState<{ login: string; name: string } | null>(null);
   const [pool, setPool] = useState<Pool | null>(null);
   const [weekProgress, setWeekProgress] = useState<WeekProgress[]>([]);
+  const [eventSub, setEventSub] = useState<EventSubStatus | null>(null);
 
   const [seasonId, setSeasonId] = useState(seasons[0]?.id ?? "");
   const [title, setTitle] = useState("¿Qué semana se completa primero?");
@@ -99,6 +106,7 @@ export default function BettingPanel({
       const data = await res.json();
       setTwitchConnected(data.twitchConnected);
       setBroadcaster(data.broadcaster);
+      setEventSub(data.eventSub ?? null);
       setWeekProgress(data.weekProgress ?? []);
       const active = data.activePool as Pool | null;
       setPool(active);
@@ -224,6 +232,26 @@ export default function BettingPanel({
     }
   }
 
+  async function registerEventSub() {
+    setLoading(true);
+    setMessage("");
+    try {
+      const res = await fetch("/api/admin/betting/eventsub", { method: "POST" });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Error EventSub");
+      setMessage(
+        data.created?.length
+          ? `EventSub registrado: ${data.created.join(", ")}`
+          : "EventSub ya estaba activo."
+      );
+      await refresh();
+    } catch (e) {
+      setMessage(e instanceof Error ? e.message : "Error");
+    } finally {
+      setLoading(false);
+    }
+  }
+
   async function cancelBet() {
     if (!pool?.id) return;
     setLoading(true);
@@ -305,9 +333,63 @@ export default function BettingPanel({
             Twitch
           </h2>
           {twitchConnected && broadcaster ? (
-            <p style={{ color: fnt.green }}>
-              Conectado como {broadcaster.name} (@{broadcaster.login})
-            </p>
+            <>
+              <p style={{ color: fnt.green }}>
+                Conectado como {broadcaster.name} (@{broadcaster.login})
+              </p>
+              {eventSub && (
+                <div
+                  style={{
+                    marginTop: 12,
+                    padding: 12,
+                    borderRadius: 8,
+                    border: `1px solid ${fnt.border}`,
+                    background: "rgba(2, 14, 36, 0.45)",
+                    display: "grid",
+                    gap: 8,
+                  }}
+                >
+                  <span style={{ color: fnt.textDim, fontSize: fs(12, 14) }}>
+                    Webhook EventSub (apuestas en vivo + sorteo)
+                  </span>
+                  <code
+                    style={{
+                      fontSize: fs(11, 13),
+                      color: fnt.textMuted,
+                      wordBreak: "break-all",
+                    }}
+                  >
+                    {eventSub.callback}
+                  </code>
+                  {!eventSub.configured ? (
+                    <p style={{ color: fnt.red, margin: 0 }}>
+                      Falta TWITCH_EVENTSUB_SECRET en el servidor.
+                    </p>
+                  ) : eventSub.progress && eventSub.lock ? (
+                    <p style={{ color: fnt.green, margin: 0 }}>
+                      Suscripciones activas (progress + lock).
+                    </p>
+                  ) : (
+                    <>
+                      <p style={{ color: fnt.yellow, margin: 0 }}>
+                        Faltan suscripciones EventSub
+                        {!eventSub.progress ? " · progress" : ""}
+                        {!eventSub.lock ? " · lock" : ""}.
+                        En local necesitas URL pública (túnel o Vercel).
+                      </p>
+                      <button
+                        type="button"
+                        style={blueButton}
+                        disabled={loading}
+                        onClick={registerEventSub}
+                      >
+                        Registrar EventSub
+                      </button>
+                    </>
+                  )}
+                </div>
+              )}
+            </>
           ) : (
             <>
               <p style={{ color: fnt.textDim, marginBottom: 12 }}>

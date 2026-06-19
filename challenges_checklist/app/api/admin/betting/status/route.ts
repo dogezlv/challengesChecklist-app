@@ -1,7 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/app/lib/admin-auth";
 import { createServiceClient } from "@/app/lib/supabase-service";
-import { getValidTwitchTokens } from "@/app/lib/twitch/helix";
+import { getPredictionEventSubStatus, getValidTwitchTokens } from "@/app/lib/twitch/helix";
 import { processPendingResolves } from "@/app/lib/twitch/resolve-pool";
 
 export async function GET() {
@@ -51,6 +51,15 @@ export async function GET() {
     }
   }
 
+  let eventSub: Awaited<ReturnType<typeof getPredictionEventSubStatus>> | null = null;
+  if (tokens) {
+    try {
+      eventSub = await getPredictionEventSubStatus(tokens.broadcaster_id);
+    } catch {
+      eventSub = null;
+    }
+  }
+
   return NextResponse.json({
     twitchConnected: !!tokens,
     broadcaster: tokens
@@ -60,6 +69,7 @@ export async function GET() {
           name: tokens.broadcaster_name,
         }
       : null,
+    eventSub,
     pools: pools ?? [],
     activePool: activePool ?? null,
     weekProgress,

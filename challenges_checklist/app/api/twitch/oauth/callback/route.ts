@@ -2,6 +2,7 @@ import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
 import { createServiceClient } from "@/app/lib/supabase-service";
 import {
+  ensurePredictionEventSub,
   twitchClientId,
   twitchClientSecret,
   twitchRedirectUri,
@@ -84,6 +85,12 @@ export async function GET(req: Request) {
     },
     { onConflict: "broadcaster_id" }
   );
+
+  try {
+    await ensurePredictionEventSub(user.id);
+  } catch (e) {
+    console.warn("EventSub registration after OAuth:", e);
+  }
 
   return NextResponse.redirect("/admin/betting?connected=1");
 }
