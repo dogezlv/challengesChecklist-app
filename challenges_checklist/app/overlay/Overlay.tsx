@@ -159,16 +159,77 @@ const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
   ],
 };
 
+// Plantillas públicas (mismo copy que test=2) para stream sin spoilers.
+function publicNotice(
+  rowId: string,
+  type: Notice["type"],
+  from: number,
+  to: number,
+  target: number,
+  week: string | null,
+  isPrestige: boolean,
+  isMeta: boolean
+): Notice {
+  const key = `${rowId}-${Date.now()}`;
+  if (isMeta) {
+    return {
+      id: rowId,
+      key,
+      type: "meta",
+      quest: "Vista previa — acento dorado semanal",
+      eyebrow: "¡Semana completada!",
+      week,
+      from,
+      to,
+      target,
+      prestige: false,
+    };
+  }
+  if (isPrestige) {
+    return {
+      id: rowId,
+      key,
+      type: "completed",
+      quest: "Vista previa — efecto iridiscente finalizado",
+      eyebrow: "¡Estilo premium listo!",
+      week,
+      from,
+      to,
+      target,
+      prestige: true,
+      prestigeTag: "Premium",
+    };
+  }
+  return {
+    id: rowId,
+    key,
+    type: "completed",
+    quest: "Vista previa — notificación en verde",
+    eyebrow: "¡Completado!",
+    week,
+    from,
+    to,
+    target,
+    prestige: false,
+  };
+}
+
 export default function Overlay({
   seasonCode,
   durationMs,
   testMode,
+  watchChallengeId,
 }: {
   seasonCode: string | null;
   durationMs: number;
   testMode: 0 | 1 | 2;
+  watchChallengeId: string | null;
 }) {
   const supabase = createClient();
+  // test=2 + challenge = overlay público en vivo (sin demo al cargar).
+  const publicLive = testMode === 2 && !!watchChallengeId;
+  const watchId = useRef(watchChallengeId);
+  watchId.current = watchChallengeId;
 
   // baseline conocido de cada desafío: {valor, completado}. Detecta progreso
   // nuevo y la transición a completado sin REPLICA IDENTITY FULL.
@@ -244,16 +305,40 @@ export default function Overlay({
     state.current.set(row.id, { value: val, completed: done });
 
     if (isInsert || !prev) return; // INSERT / sin baseline: solo registrar
+
+    const watched = watchId.current;
+    if (watched && row.id !== watched) return;
+
     const allowed = allowedWeeks.current;
     if (allowed && row.week_id && !allowed.has(row.week_id)) return;
 
     const weekNum = row.week_id ? weeks.current.get(row.week_id) : undefined;
+    const weekLabel = weekNum != null ? `Semana ${weekNum}` : null;
+
+    if (publicLive) {
+      if (done && !prev.completed) {
+        enqueue(
+          publicNotice(
+            row.id,
+            row.is_meta ? "meta" : "completed",
+            prev.value,
+            target,
+            target,
+            weekLabel,
+            !!row.is_prestige,
+            !!row.is_meta
+          )
+        );
+      }
+      return;
+    }
+
     const mk = (type: Notice["type"], from: number, to: number): Notice => ({
       id: row.id,
       key: `${row.id}-${Date.now()}`,
       type,
       quest: row.description,
-      week: weekNum != null ? `Semana ${weekNum}` : null,
+      week: weekLabel,
       from,
       to,
       target,
@@ -333,12 +418,12 @@ export default function Overlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Modo prueba: recorre progreso → completado → semanal → prestigio.
+  // Modo prueba local: recorre estilos al cargar (solo sin ?challenge=).
   useEffect(() => {
-    if (!testMode) return;
+    if (!testMode || watchChallengeId) return;
     for (const notice of DEMO_NOTICES[testMode]) enqueue(notice);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [testMode]);
+  }, [testMode, watchChallengeId]);
 
   // Animación de la barra y el número (de `from` a `to`) al entrar en "show".
   useEffect(() => {
