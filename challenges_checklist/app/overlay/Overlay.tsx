@@ -16,6 +16,8 @@ type Notice = {
   to: number;
   target: number;
   prestige: boolean;
+  eyebrow?: string;
+  prestigeTag?: string;
 };
 
 type ChallengeRow = {
@@ -33,14 +35,138 @@ const ENTER_MS = 450; // entrada (deslizar)
 const FILL_MS = 850; // relleno de la barra + conteo del número
 const EXIT_MS = 450; // salida (deslizar)
 
+const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
+  1: [
+    {
+      id: "demo-progress",
+      key: "demo-progress",
+      type: "progress",
+      quest: "Inflige daño a oponentes con fusiles de asalto",
+      week: "Semana 3",
+      from: 10,
+      to: 40,
+      target: 100,
+      prestige: false,
+    },
+    {
+      id: "demo-completed",
+      key: "demo-completed",
+      type: "completed",
+      quest: "Visita los 7 campamentos piratas en una sola partida",
+      week: "Semana 3",
+      from: 6,
+      to: 7,
+      target: 7,
+      prestige: false,
+    },
+    {
+      id: "demo-meta",
+      key: "demo-meta",
+      type: "meta",
+      quest: "Completa todos los desafíos de la semana",
+      week: "Semana 3",
+      from: 6,
+      to: 7,
+      target: 7,
+      prestige: false,
+    },
+    {
+      id: "demo-prestige-progress",
+      key: "demo-prestige-progress",
+      type: "progress",
+      quest: "Visita 2 puntos cardinales opuestos en la misma partida",
+      week: "Semana 2",
+      from: 0,
+      to: 1,
+      target: 2,
+      prestige: true,
+    },
+    {
+      id: "demo-prestige",
+      key: "demo-prestige",
+      type: "completed",
+      quest: "Gana salud o escudo con un bidón de plasma",
+      week: "Semana 2",
+      from: 90,
+      to: 180,
+      target: 180,
+      prestige: true,
+    },
+  ],
+  2: [
+    {
+      id: "demo-progress",
+      key: "demo-progress",
+      type: "progress",
+      quest: "Vista previa — barra de progreso animada",
+      eyebrow: "Progreso actualizado",
+      week: "Semana 1",
+      from: 12,
+      to: 48,
+      target: 100,
+      prestige: false,
+    },
+    {
+      id: "demo-completed",
+      key: "demo-completed",
+      type: "completed",
+      quest: "Vista previa — notificación en verde",
+      eyebrow: "¡Completado!",
+      week: "Semana 1",
+      from: 4,
+      to: 5,
+      target: 5,
+      prestige: false,
+    },
+    {
+      id: "demo-meta",
+      key: "demo-meta",
+      type: "meta",
+      quest: "Vista previa — acento dorado semanal",
+      eyebrow: "¡Semana completada!",
+      week: "Semana 1",
+      from: 9,
+      to: 10,
+      target: 10,
+      prestige: false,
+    },
+    {
+      id: "demo-prestige-progress",
+      key: "demo-prestige-progress",
+      type: "progress",
+      quest: "Vista previa — efecto iridiscente activo",
+      eyebrow: "Estilo premium",
+      week: "Semana 2",
+      from: 1,
+      to: 2,
+      target: 4,
+      prestige: true,
+      prestigeTag: "Premium",
+    },
+    {
+      id: "demo-prestige",
+      key: "demo-prestige",
+      type: "completed",
+      quest: "Vista previa — efecto iridiscente finalizado",
+      eyebrow: "¡Estilo premium listo!",
+      week: "Semana 2",
+      from: 60,
+      to: 120,
+      target: 120,
+      prestige: true,
+      prestigeTag: "Premium",
+    },
+  ],
+};
+
 export default function Overlay({
   seasonCode,
   durationMs,
-  test,
+  testMode,
 }: {
   seasonCode: string | null;
   durationMs: number;
-  test: boolean;
+  testMode: 0 | 1 | 2;
 }) {
   const supabase = createClient();
 
@@ -207,66 +333,12 @@ export default function Overlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Modo prueba: progreso → completado → semanal, para ver los tres tipos.
+  // Modo prueba: recorre progreso → completado → semanal → prestigio.
   useEffect(() => {
-    if (!test) return;
-    enqueue({
-      id: "demo-progress",
-      key: "demo-progress",
-      type: "progress",
-      quest: "Inflige daño a oponentes con fusiles de asalto",
-      week: "Semana 3",
-      from: 10,
-      to: 40,
-      target: 100,
-      prestige: false,
-    });
-    enqueue({
-      id: "demo-completed",
-      key: "demo-completed",
-      type: "completed",
-      quest: "Visita los 7 campamentos piratas en una sola partida",
-      week: "Semana 3",
-      from: 6,
-      to: 7,
-      target: 7,
-      prestige: false,
-    });
-    enqueue({
-      id: "demo-meta",
-      key: "demo-meta",
-      type: "meta",
-      quest: "Completa todos los desafíos de la semana",
-      week: "Semana 3",
-      from: 6,
-      to: 7,
-      target: 7,
-      prestige: false,
-    });
-    enqueue({
-      id: "demo-prestige-progress",
-      key: "demo-prestige-progress",
-      type: "progress",
-      quest: "Visita 2 puntos cardinales opuestos en la misma partida",
-      week: "Semana 2",
-      from: 0,
-      to: 1,
-      target: 2,
-      prestige: true,
-    });
-    enqueue({
-      id: "demo-prestige",
-      key: "demo-prestige",
-      type: "completed",
-      quest: "Gana salud o escudo con un bidón de plasma",
-      week: "Semana 2",
-      from: 90,
-      to: 180,
-      target: 180,
-      prestige: true,
-    });
+    if (!testMode) return;
+    for (const notice of DEMO_NOTICES[testMode]) enqueue(notice);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [test]);
+  }, [testMode]);
 
   // Animación de la barra y el número (de `from` a `to`) al entrar en "show".
   useEffect(() => {
@@ -291,15 +363,17 @@ export default function Overlay({
 
   if (!current) return <style>{styles}</style>;
 
-  const eyebrow = current.prestige
-    ? current.type === "completed"
-      ? "¡Prestigio completado!"
-      : "Desafío de prestigio"
-    : current.type === "meta"
-      ? "¡Semana completada!"
-      : current.type === "completed"
-        ? "Desafío completado"
-        : "Progreso de misión";
+  const eyebrow =
+    current.eyebrow ??
+    (current.prestige
+      ? current.type === "completed"
+        ? "¡Prestigio completado!"
+        : "Desafío de prestigio"
+      : current.type === "meta"
+        ? "¡Semana completada!"
+        : current.type === "completed"
+          ? "Desafío completado"
+          : "Progreso de misión");
   const icon = current.type === "meta" ? "/icons/battle_pass.png" : "/icons/battle_star.png";
   const pct =
     current.target > 0 ? Math.min((anim / current.target) * 100, 100) : 0;
@@ -321,7 +395,9 @@ export default function Overlay({
           </div>
           <div className="ov-text">
             <div className="ov-eyebrow">
-              {current.prestige && <span className="ov-tag">Prestigio</span>}
+              {current.prestige && (
+                <span className="ov-tag">{current.prestigeTag ?? "Prestigio"}</span>
+              )}
               {current.week ? `${current.week} · ` : ""}
               {eyebrow}
             </div>
