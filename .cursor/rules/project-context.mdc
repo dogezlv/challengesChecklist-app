@@ -1,0 +1,38 @@
+---
+description: Contexto del proyecto — CLAUDE.md, Supabase MCP y reglas Cursor
+alwaysApply: true
+---
+
+# Contexto del proyecto
+
+## Fuente principal
+
+- Lee **`CLAUDE.md`** (repo root) antes de cambios arquitectónicos, SQL o UI.
+- La app vive en **`challenges_checklist/`** — ejecuta npm desde ahí.
+- **`challenges_checklist/AGENTS.md`** aplica a código Next.js 16 (APIs distintas a versiones anteriores).
+
+## Mantener CLAUDE.md actualizado
+
+Tras cambios significativos, **actualiza `CLAUDE.md`** en la misma sesión:
+
+- Nueva migración en `db/` → documentar número, propósito y si ya está aplicada en remoto.
+- Cambios de auth, RPCs, RLS o modelo de datos.
+- Features UI nuevas o pendientes resueltas (quitar "follow-up" obsoletos).
+- Sección **`## Estado remoto (Supabase)`** cuando se verifique el estado de migraciones.
+
+No dupliques todo el doc en reglas; las reglas apuntan al archivo canónico.
+
+## Supabase
+
+- Proyecto: **`ucjuxngjmcdwggishima`**
+- MCP: `.cursor/mcp.json` → `https://mcp.supabase.com/mcp?project_ref=ucjuxngjmcdwggishima&read_only=true`
+- Sin MCP: Management API con `SUPABASE_ACCESS_TOKEN` (ver CLAUDE.md).
+- Credenciales en `challenges_checklist/.env.local` — **nunca commitear**.
+
+## Convenciones propias del agente
+
+- UI en **español**; `display_name` es la etiqueta mostrada.
+- Estilos prominentes: helpers de `app/lib/theme.ts` + `style` inline (no Tailwind en superficies principales).
+- Overlay OBS: **sin Burbank**, sin `PageBackground`.
+- Cambios mínimos; no reimplementar lo que ya existe en `TrackerPanel` / `ChallengeChecklist`.
+- Sin suite de tests: `npm run build` es la comprobación principal.

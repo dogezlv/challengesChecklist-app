@@ -1,7 +1,7 @@
 "use client";
 
 import FortniteIcon from "./FortniteIcon";
-import { bodyFont, fnt, fs, progressFill, progressTrack, titleFont } from "../lib/theme";
+import { accentFill, bodyFont, fnt, fs, progressFill, progressTrack, titleFont } from "../lib/theme";
 
 // Fila de desafío estilo "Road Trip" (Battle Pass, Season X): chevron a la
 // izquierda, objetivo en texto claro, barra de progreso fina y contador X/Y a
@@ -14,6 +14,7 @@ export default function MissionCard({
   completed,
   locked = false,
   meta = false,
+  accent: accentProp,
   children,
 }: {
   title: string;
@@ -23,11 +24,17 @@ export default function MissionCard({
   completed: boolean;
   locked?: boolean;
   meta?: boolean;
+  // color característico (de la semana o del prestigio); tiñe borde/chevron/barra
+  accent?: string;
   children?: React.ReactNode;
 }) {
   const percent = target > 0 ? Math.min((current / target) * 100, 100) : 0;
   const variant = completed ? "done" : meta ? "meta" : "blue";
-  const accent = completed ? fnt.green : meta ? fnt.gold : "#bfe6ff";
+  const accent = completed ? fnt.green : meta ? fnt.gold : accentProp ?? "#bfe6ff";
+  const fillStyle =
+    !completed && !meta && accentProp
+      ? accentFill(percent, accentProp)
+      : progressFill(percent, variant);
 
   return (
     <div
@@ -102,7 +109,7 @@ export default function MissionCard({
           style={{ display: "flex", alignItems: "center", gap: fs(12, 20) }}
         >
           <div style={{ ...progressTrack, height: fs(6, 10), flex: 1 }}>
-            <div style={progressFill(percent, variant)} />
+            <div style={fillStyle} />
           </div>
           <div
             style={{

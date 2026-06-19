@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import FortniteIcon from "../components/FortniteIcon";
+import PageBackground from "../components/PageBackground";
 import { fnt, pageMain, panel, yellowButton } from "../lib/theme";
 
 export default function LoginPage() {
@@ -55,6 +56,7 @@ export default function LoginPage() {
         padding: 24,
       }}
     >
+      <PageBackground />
       <div
         style={{
           ...panel,

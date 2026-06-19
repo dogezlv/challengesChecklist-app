@@ -3,6 +3,7 @@ import { cookies } from "next/headers";
 import Link from "next/link";
 import ChallengeChecklist from "./components/ChallengeChecklist";
 import LogoutButton from "./components/LogoutButton";
+import PageBackground from "./components/PageBackground";
 import TopNav from "./components/TopNav";
 import { contentWrap, navTab, pageMain } from "./lib/theme";
 import { getSeasonWeekSelection } from "./lib/selection";
@@ -55,6 +56,7 @@ export default async function Page({
 
   return (
     <main style={pageMain}>
+      <PageBackground />
       <div style={contentWrap}>
         <TopNav
           tabs={navTabs}

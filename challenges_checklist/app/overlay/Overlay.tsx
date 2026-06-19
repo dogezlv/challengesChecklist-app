@@ -15,12 +15,16 @@ type Notice = {
   from: number;
   to: number;
   target: number;
+  prestige: boolean;
+  eyebrow?: string;
+  prestigeTag?: string;
 };
 
 type ChallengeRow = {
   id: string;
   is_completed: boolean;
   is_meta: boolean | null;
+  is_prestige: boolean | null;
   description: string;
   week_id: string | null;
   current_value: number | null;
@@ -31,14 +35,138 @@ const ENTER_MS = 450; // entrada (deslizar)
 const FILL_MS = 850; // relleno de la barra + conteo del número
 const EXIT_MS = 450; // salida (deslizar)
 
+const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
+  1: [
+    {
+      id: "demo-progress",
+      key: "demo-progress",
+      type: "progress",
+      quest: "Inflige daño a oponentes con fusiles de asalto",
+      week: "Semana 3",
+      from: 10,
+      to: 40,
+      target: 100,
+      prestige: false,
+    },
+    {
+      id: "demo-completed",
+      key: "demo-completed",
+      type: "completed",
+      quest: "Visita los 7 campamentos piratas en una sola partida",
+      week: "Semana 3",
+      from: 6,
+      to: 7,
+      target: 7,
+      prestige: false,
+    },
+    {
+      id: "demo-meta",
+      key: "demo-meta",
+      type: "meta",
+      quest: "Completa todos los desafíos de la semana",
+      week: "Semana 3",
+      from: 6,
+      to: 7,
+      target: 7,
+      prestige: false,
+    },
+    {
+      id: "demo-prestige-progress",
+      key: "demo-prestige-progress",
+      type: "progress",
+      quest: "Visita 2 puntos cardinales opuestos en la misma partida",
+      week: "Semana 2",
+      from: 0,
+      to: 1,
+      target: 2,
+      prestige: true,
+    },
+    {
+      id: "demo-prestige",
+      key: "demo-prestige",
+      type: "completed",
+      quest: "Gana salud o escudo con un bidón de plasma",
+      week: "Semana 2",
+      from: 90,
+      to: 180,
+      target: 180,
+      prestige: true,
+    },
+  ],
+  2: [
+    {
+      id: "demo-progress",
+      key: "demo-progress",
+      type: "progress",
+      quest: "Vista previa — barra de progreso animada",
+      eyebrow: "Progreso actualizado",
+      week: "Semana 1",
+      from: 12,
+      to: 48,
+      target: 100,
+      prestige: false,
+    },
+    {
+      id: "demo-completed",
+      key: "demo-completed",
+      type: "completed",
+      quest: "Vista previa — notificación en verde",
+      eyebrow: "¡Completado!",
+      week: "Semana 1",
+      from: 4,
+      to: 5,
+      target: 5,
+      prestige: false,
+    },
+    {
+      id: "demo-meta",
+      key: "demo-meta",
+      type: "meta",
+      quest: "Vista previa — acento dorado semanal",
+      eyebrow: "¡Semana completada!",
+      week: "Semana 1",
+      from: 9,
+      to: 10,
+      target: 10,
+      prestige: false,
+    },
+    {
+      id: "demo-prestige-progress",
+      key: "demo-prestige-progress",
+      type: "progress",
+      quest: "Vista previa — efecto iridiscente activo",
+      eyebrow: "Estilo premium",
+      week: "Semana 2",
+      from: 1,
+      to: 2,
+      target: 4,
+      prestige: true,
+      prestigeTag: "Premium",
+    },
+    {
+      id: "demo-prestige",
+      key: "demo-prestige",
+      type: "completed",
+      quest: "Vista previa — efecto iridiscente finalizado",
+      eyebrow: "¡Estilo premium listo!",
+      week: "Semana 2",
+      from: 60,
+      to: 120,
+      target: 120,
+      prestige: true,
+      prestigeTag: "Premium",
+    },
+  ],
+};
+
 export default function Overlay({
   seasonCode,
   durationMs,
-  test,
+  testMode,
 }: {
   seasonCode: string | null;
   durationMs: number;
-  test: boolean;
+  testMode: 0 | 1 | 2;
 }) {
   const supabase = createClient();
 
@@ -93,6 +221,12 @@ export default function Overlay({
     const q = queue.current;
     const idx = q.findIndex((x) => x.id === n.id);
     if (idx >= 0) {
+      // Conserva el ARRANQUE de la notificación que ya esperaba: la barra debe
+      // animar desde lo último que se mostró (el `from` original), no desde el
+      // penúltimo evento — si no, un evento nuevo mientras espera haría que se
+      // viera solo el último saltito (+1) en vez de todo el progreso.
+      n.from = Math.min(q[idx].from, n.from);
+      if (n.from > n.to) n.from = n.to; // nunca animar hacia atrás
       n.key = q[idx].key; // conserva su posición/identidad
       q[idx] = n;
     } else {
@@ -123,6 +257,7 @@ export default function Overlay({
       from,
       to,
       target,
+      prestige: !!row.is_prestige,
     });
 
     if (done && !prev.completed) {
@@ -198,41 +333,12 @@ export default function Overlay({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Modo prueba: progreso → completado → semanal, para ver los tres tipos.
+  // Modo prueba: recorre progreso → completado → semanal → prestigio.
   useEffect(() => {
-    if (!test) return;
-    enqueue({
-      id: "demo-progress",
-      key: "demo-progress",
-      type: "progress",
-      quest: "Inflige daño a oponentes con fusiles de asalto",
-      week: "Semana 3",
-      from: 10,
-      to: 40,
-      target: 100,
-    });
-    enqueue({
-      id: "demo-completed",
-      key: "demo-completed",
-      type: "completed",
-      quest: "Visita los 7 campamentos piratas en una sola partida",
-      week: "Semana 3",
-      from: 6,
-      to: 7,
-      target: 7,
-    });
-    enqueue({
-      id: "demo-meta",
-      key: "demo-meta",
-      type: "meta",
-      quest: "Completa todos los desafíos de la semana",
-      week: "Semana 3",
-      from: 6,
-      to: 7,
-      target: 7,
-    });
+    if (!testMode) return;
+    for (const notice of DEMO_NOTICES[testMode]) enqueue(notice);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [test]);
+  }, [testMode]);
 
   // Animación de la barra y el número (de `from` a `to`) al entrar en "show".
   useEffect(() => {
@@ -258,11 +364,16 @@ export default function Overlay({
   if (!current) return <style>{styles}</style>;
 
   const eyebrow =
-    current.type === "meta"
-      ? "¡Semana completada!"
-      : current.type === "completed"
-        ? "Desafío completado"
-        : "Progreso de misión";
+    current.eyebrow ??
+    (current.prestige
+      ? current.type === "completed"
+        ? "¡Prestigio completado!"
+        : "Desafío de prestigio"
+      : current.type === "meta"
+        ? "¡Semana completada!"
+        : current.type === "completed"
+          ? "Desafío completado"
+          : "Progreso de misión");
   const icon = current.type === "meta" ? "/icons/battle_pass.png" : "/icons/battle_star.png";
   const pct =
     current.target > 0 ? Math.min((anim / current.target) * 100, 100) : 0;
@@ -271,13 +382,22 @@ export default function Overlay({
     <>
       <style>{styles}</style>
       <div className="ov-root">
-        <div key={current.key} className={`ov-card ov-${current.type} ov-${phase}`}>
+        <div
+          key={current.key}
+          className={`ov-card ov-${current.type} ov-${phase}${
+            current.prestige ? " ov-prestige" : ""
+          }`}
+        >
+          {current.prestige && <div className="ov-holo" />}
           <div className="ov-badge">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={icon} alt="" className="ov-badge-img" />
           </div>
           <div className="ov-text">
             <div className="ov-eyebrow">
+              {current.prestige && (
+                <span className="ov-tag">{current.prestigeTag ?? "Prestigio"}</span>
+              )}
               {current.week ? `${current.week} · ` : ""}
               {eyebrow}
             </div>
@@ -352,6 +472,64 @@ html, body { background: transparent !important; margin: 0; }
     0 10px 28px rgba(0, 0, 0, 0.42),
     0 0 48px rgba(255,210,60,0.32),
     inset 0 1px 0 rgba(255, 255, 255, 0.16);
+}
+
+/* ── PRESTIGIO: diseño premium iridiscente (se superpone al tipo) ──────────── */
+.ov-prestige {
+  background:
+    linear-gradient(105deg, rgba(13,20,54,0.97) 0%, rgba(18,84,104,0.93) 42%, rgba(86,40,120,0.92) 72%, rgba(150,110,24,0.9) 100%);
+  border-color: rgba(120, 240, 220, 0.6);
+  border-left: 4px solid #16e0c0;
+  box-shadow:
+    0 12px 32px rgba(0, 0, 0, 0.5),
+    0 0 60px rgba(28, 220, 196, 0.32),
+    0 0 90px rgba(150, 90, 230, 0.22),
+    inset 0 1px 0 rgba(255, 255, 255, 0.2);
+  animation: ovPrestigeGlow 3.4s ease-in-out infinite;
+}
+.ov-prestige.ov-completed,
+.ov-prestige.ov-meta {
+  border-left-color: #ffd23c;
+}
+.ov-prestige .ov-eyebrow { color: #8ff3e4; }
+.ov-prestige .ov-count { color: #d8fff5; }
+.ov-prestige .ov-bar-fill {
+  background: linear-gradient(90deg, #19e6c4 0%, #6fd0ff 38%, #b489ff 70%, #ffd23c 100%);
+}
+.ov-prestige .ov-badge { animation: ovPulse 1.2s ease-in-out infinite; }
+
+/* etiqueta "PRESTIGIO" delante del eyebrow */
+.ov-tag {
+  display: inline-block;
+  margin-right: 8px;
+  padding: 2px 8px 1px;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: 1.2px;
+  vertical-align: 2px;
+  color: #07221f;
+  background: linear-gradient(100deg, #18e6c4 0%, #b489ff 60%, #ffd23c 100%);
+  box-shadow: 0 2px 8px rgba(24,230,196,0.45);
+  text-shadow: none;
+}
+
+/* barrido holográfico continuo, exclusivo del prestigio */
+.ov-holo {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: linear-gradient(
+    115deg,
+    transparent 30%,
+    rgba(120, 240, 220, 0.10) 44%,
+    rgba(180, 137, 255, 0.16) 50%,
+    rgba(255, 210, 60, 0.10) 56%,
+    transparent 70%
+  );
+  background-size: 280% 100%;
+  mix-blend-mode: screen;
+  animation: ovHolo 3.2s linear infinite;
 }
 
 .ov-badge {
@@ -453,5 +631,25 @@ html, body { background: transparent !important; margin: 0; }
 @keyframes ovPulse {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.06); }
+}
+@keyframes ovHolo {
+  0%   { background-position: 140% 0; }
+  100% { background-position: -140% 0; }
+}
+@keyframes ovPrestigeGlow {
+  0%, 100% {
+    box-shadow:
+      0 12px 32px rgba(0,0,0,0.5),
+      0 0 52px rgba(28,220,196,0.28),
+      0 0 80px rgba(150,90,230,0.18),
+      inset 0 1px 0 rgba(255,255,255,0.2);
+  }
+  50% {
+    box-shadow:
+      0 12px 32px rgba(0,0,0,0.5),
+      0 0 74px rgba(28,220,196,0.45),
+      0 0 110px rgba(150,90,230,0.32),
+      inset 0 1px 0 rgba(255,255,255,0.2);
+  }
 }
 `;
