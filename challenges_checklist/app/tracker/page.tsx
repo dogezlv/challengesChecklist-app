@@ -82,6 +82,10 @@ export default async function TrackerPage({
       initialDistinctProgress={distinctProgress.data ?? []}
       effects={(effects.data ?? []) as never[]}
       isAdmin={!!adminRow.data}
+      userId={user.id}
+      actorName={
+        user.email ? user.email.split("@")[0] ?? "supervisor" : "supervisor"
+      }
     />
   );
 }

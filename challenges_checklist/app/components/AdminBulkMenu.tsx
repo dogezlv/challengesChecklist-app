@@ -11,7 +11,8 @@ export type AdminBulkAction =
   | "complete_prestiges"
   | "reset_normals"
   | "reset_prestiges"
-  | "reset_matches";
+  | "reset_matches"
+  | "clear_tracker_logs";
 
 type ActionDef = {
   id: AdminBulkAction;
@@ -67,6 +68,14 @@ const ACTIONS: ActionDef[] = [
     rpc: "reset_matches",
     description: "Elimina partidas y progreso por partida activo",
     confirm: "¿Eliminar todas las partidas y desbloquear fases bloqueadas por partida?",
+    destructive: true,
+  },
+  {
+    id: "clear_tracker_logs",
+    label: "Borrar logs del tracker",
+    rpc: "clear_tracker_logs",
+    description: "Elimina todo el registro de actividad del panel",
+    confirm: "¿Borrar todos los logs de supervisión? No se puede deshacer.",
     destructive: true,
   },
 ];
@@ -222,6 +231,9 @@ export default function AdminBulkMenu({ onDone }: { onDone: () => void }) {
     if (error) {
       alert(error.message);
       return;
+    }
+    if (pending.id === "clear_tracker_logs") {
+      window.dispatchEvent(new Event("tracker-logs-cleared"));
     }
     onDone();
   }

@@ -32,8 +32,8 @@ export const MISSION_VISUALS: Record<string, MissionVisual> = {
   },
   map_junk: {
     kind: "treasure_map",
-    src: "/treasure/map_2_forknife.png",
-    title: "Mapa del tesoro 2 — Forknife",
+    src: "/treasure/map_junk_junction.png",
+    title: "Mapa del tesoro — Cruce Chatarra (Fork Knife)",
     buttonLabel: "Mapa del tesoro",
   },
 };

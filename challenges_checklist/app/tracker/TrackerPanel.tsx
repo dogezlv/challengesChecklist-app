@@ -13,7 +13,22 @@ import PageBackground from "../components/PageBackground";
 import SearchBox from "../components/SearchBox";
 import WeekTabs from "../components/WeekTabs";
 import TopNav from "../components/TopNav";
-import { contentWrap, fnt, fs, pageMain, panel, titleFont, weekAccent, yellowButton } from "../lib/theme";
+import TrackerLogsPanel from "../components/TrackerLogsPanel";
+import {
+  TrackerLocalResultFeed,
+  TrackerMiniLogFeed,
+} from "../components/TrackerMiniLogFeed";
+import { contentWrap, fnt, fs, pageMain, panel, pillTab, titleFont, weekAccent, yellowButton } from "../lib/theme";
+import {
+  globalSection,
+  logTrackerActivity,
+  MATCH_SECTION,
+  upsertSectionLogRow,
+  WEEK_SECTION,
+  type TrackerLogActionContext,
+  type TrackerLogPayload,
+  type TrackerLogRow,
+} from "../lib/trackerLog";
 import { specialLandKind } from "../lib/specialMissions";
 import type { Season, Week } from "../lib/selection";
 import {
@@ -334,6 +349,8 @@ export default function TrackerPanel({
   initialDistinctProgress,
   effects,
   isAdmin,
+  userId,
+  actorName,
 }: {
   seasons: Season[];
   weeks: Week[];
@@ -348,6 +365,8 @@ export default function TrackerPanel({
   initialDistinctProgress: DistinctRow[];
   effects: EffectRow[];
   isAdmin: boolean;
+  userId: string;
+  actorName: string;
 }) {
   const supabase = createClient();
   const router = useRouter();
@@ -373,6 +392,88 @@ export default function TrackerPanel({
   const [search, setSearch] = useState("");
   // vista de prestigio en el panel por semana (no mezclar con los normales)
   const [prestigeView, setPrestigeView] = useState(false);
+  const [trackerView, setTrackerView] = useState<"track" | "logs">("track");
+  const [remoteLogs, setRemoteLogs] = useState<Record<string, TrackerLogRow[]>>(
+    {}
+  );
+
+  const pushSectionLog = (row: TrackerLogRow) => {
+    setRemoteLogs((prev) => upsertSectionLogRow(prev, row));
+  };
+
+  function makeLogRow(
+    section: string,
+    actionCode: string | null,
+    payload: TrackerLogPayload
+  ): TrackerLogRow {
+    return {
+      id: crypto.randomUUID(),
+      user_id: userId,
+      actor_name: actorName,
+      section,
+      action_code: actionCode,
+      payload,
+      created_at: new Date().toISOString(),
+    };
+  }
+
+  async function emitLog(
+    section: string,
+    actionCode: string | null,
+    payload: TrackerLogPayload
+  ) {
+    pushSectionLog(makeLogRow(section, actionCode, payload));
+    await logTrackerActivity(supabase, section, actionCode, payload);
+  }
+
+  function buildRegisterActionContext(
+    cat: Category,
+    sel: Selection,
+    view: CategoryView,
+    amount: number
+  ): TrackerLogActionContext {
+    const labelFor = (key: string | null, options: Option[]) =>
+      key ? (options.find((o) => o.key === key)?.label ?? null) : null;
+    const condLabels = view.condOptions
+      .filter((c) => c.auto || sel.conds.includes(c.key))
+      .map((c) => c.label);
+    const showAmount =
+      cat.hasValue ||
+      QUANTITY_ACTIONS.includes(cat.actionCode) ||
+      amount !== 1;
+    return {
+      actionName: cat.actionName,
+      amount: showAmount ? amount : undefined,
+      used: labelFor(sel.used, view.usedOptions),
+      target: labelFor(sel.target, view.targetOptions),
+      location: view.locationOptions.find((l) => l.id === sel.loc)?.label ?? null,
+      conditions: condLabels.length ? condLabels : undefined,
+    };
+  }
+
+  function ruleActionContext(r: Rule): TrackerLogActionContext {
+    return {
+      actionName: r.action_type?.display_name ?? undefined,
+      used:
+        r.required_object?.display_name ?? r.required_tag?.display_name ?? null,
+      target:
+        r.target_object?.display_name ?? r.target_tag?.display_name ?? null,
+      location: r.location?.display_name ?? null,
+      conditions: r.rule_conditions.length
+        ? r.rule_conditions.map((c) => c.condition_value)
+        : undefined,
+    };
+  }
+
+  function reportPayload(data: unknown, error?: string): TrackerLogPayload {
+    if (error) return { error };
+    const res = (data ?? {}) as ReportResult;
+    return {
+      updated: res.updated,
+      skipped: res.skipped,
+      error: res.error,
+    };
+  }
 
   // re-sincroniza cuando el servidor manda otra temporada (ajuste de estado
   // durante el render comparando la prop anterior, sin efecto)
@@ -434,6 +535,21 @@ export default function TrackerPanel({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekIds.join(",")]);
+
+  useEffect(() => {
+    const channel = supabase
+      .channel("tracker-activity")
+      .on(
+        "postgres_changes",
+        { event: "INSERT", schema: "public", table: "tracker_activity_logs" },
+        (payload) => pushSectionLog(payload.new as TrackerLogRow)
+      )
+      .subscribe();
+    return () => {
+      supabase.removeChannel(channel);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userId]);
 
   const lockedIds = useMemo(() => computeLockedIds(challenges), [challenges]);
 
@@ -745,7 +861,17 @@ export default function TrackerPanel({
         ? { error: error.message }
         : ((data ?? {}) as ReportResult),
     }));
-    if (!error) loadChallenges();
+    if (!error) {
+      await emitLog(
+        globalSection(cat.actionCode),
+        cat.actionCode,
+        {
+          ...reportPayload(data),
+          action: buildRegisterActionContext(cat, sel, view, amount),
+        }
+      );
+      loadChallenges();
+    }
   }
 
   async function startMatch() {
@@ -753,6 +879,11 @@ export default function TrackerPanel({
     const { error } = await supabase.rpc("start_match");
     setBusyMatch(false);
     if (error) alert(error.message);
+    else
+      await emitLog(MATCH_SECTION, "start", {
+        message: "🟢 Partida iniciada",
+        action: { actionName: "Partida", conditions: ["Iniciar"] },
+      });
     loadMatch();
     loadChallenges();
   }
@@ -762,6 +893,11 @@ export default function TrackerPanel({
     const { error } = await supabase.rpc("end_active_match");
     setBusyMatch(false);
     if (error) alert(error.message);
+    else
+      await emitLog(MATCH_SECTION, "end", {
+        message: "Partida terminada",
+        action: { actionName: "Partida", conditions: ["Terminar"] },
+      });
     loadMatch();
     loadChallenges();
   }
@@ -773,7 +909,7 @@ export default function TrackerPanel({
       return;
     }
     setBusyMatch(true);
-    const { error } = await supabase.rpc("report_event", {
+    const { data, error } = await supabase.rpc("report_event", {
       p_action_code: "misc",
       p_amount: 1,
       p_conditions: ["win_match"],
@@ -783,6 +919,14 @@ export default function TrackerPanel({
       alert(error.message);
       return;
     }
+    await emitLog(MATCH_SECTION, "win", {
+      ...reportPayload(data),
+      action: {
+        actionName: "Victoria",
+        amount: 1,
+        conditions: ["Ganar partida"],
+      },
+    });
     const { error: endErr } = await supabase.rpc("end_active_match");
     setBusyMatch(false);
     if (endErr) alert(endErr.message);
@@ -810,6 +954,14 @@ export default function TrackerPanel({
 
     if (error) {
       alert(error.message);
+    } else {
+      await emitLog(WEEK_SECTION, null, {
+        message: `${challenge.is_completed ? "↩" : "✅"} ${challenge.description}`,
+        action: {
+          actionName: "Vista semanal",
+          conditions: [challenge.is_completed ? "Desmarcar" : "Completar"],
+        },
+      });
     }
     loadChallenges();
   }
@@ -830,6 +982,15 @@ export default function TrackerPanel({
     });
 
     if (error) alert(error.message);
+    else {
+      await emitLog(WEEK_SECTION, null, {
+        message: `🔄 Progreso reiniciado: ${challenge.description}`,
+        action: {
+          actionName: "Vista semanal",
+          conditions: ["Reiniciar progreso"],
+        },
+      });
+    }
     loadChallenges();
   }
 
@@ -905,7 +1066,7 @@ export default function TrackerPanel({
       alert(error.message);
     } else {
       const res = data as {
-        updated?: unknown[];
+        updated?: ReportUpdated[];
         skipped?: { reason?: string }[];
       } | null;
       if (res?.skipped?.length && !res?.updated?.length) {
@@ -915,6 +1076,15 @@ export default function TrackerPanel({
             : "No aplicó: requiere un lugar con nombre"
         );
       }
+      const code = r.action_type?.code ?? null;
+      await emitLog(
+        code ? globalSection(code) : WEEK_SECTION,
+        code,
+        {
+          ...reportPayload(data),
+          action: ruleActionContext(r),
+        }
+      );
     }
     loadChallenges();
   }
@@ -927,6 +1097,17 @@ export default function TrackerPanel({
     });
     setBusyRule(null);
     if (error) alert(error.message);
+    else {
+      const code = r.action_type?.code ?? null;
+      await emitLog(
+        code ? globalSection(code) : WEEK_SECTION,
+        code,
+        {
+          message: `↩ Registro quitado: ${ruleLabel(r) ?? "opción"}`,
+          action: ruleActionContext(r),
+        }
+      );
+    }
     loadChallenges();
   }
 
@@ -937,6 +1118,16 @@ export default function TrackerPanel({
     });
 
     if (error) alert(error.message);
+    else {
+      await emitLog(WEEK_SECTION, null, {
+        message: `${amount >= 0 ? "+" : ""}${amount} · ${challenge.description}`,
+        action: {
+          actionName: "Vista semanal",
+          amount: Math.abs(amount),
+          conditions: ["Ajustar progreso"],
+        },
+      });
+    }
     loadChallenges();
   }
 
@@ -947,6 +1138,16 @@ export default function TrackerPanel({
     });
 
     if (error) alert(error.message);
+    else {
+      await emitLog(WEEK_SECTION, null, {
+        message: `=${newValue} · ${challenge.description}`,
+        action: {
+          actionName: "Vista semanal",
+          amount: newValue,
+          conditions: ["Fijar progreso"],
+        },
+      });
+    }
     loadChallenges();
   }
 
@@ -1129,6 +1330,8 @@ export default function TrackerPanel({
                 onDone={() => {
                   loadMatch();
                   loadChallenges();
+                  setRemoteLogs({});
+                  window.dispatchEvent(new Event("tracker-logs-cleared"));
                 }}
               />
             )}
@@ -1172,8 +1375,36 @@ export default function TrackerPanel({
             Registro global de eventos · toda la temporada
           </span>
         </div>
+        <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
+          <button
+            type="button"
+            style={pillTab(trackerView === "track")}
+            onClick={() => setTrackerView("track")}
+          >
+            Supervisión
+          </button>
+          <button
+            type="button"
+            style={pillTab(trackerView === "logs")}
+            onClick={() => setTrackerView("logs")}
+          >
+            Registro
+          </button>
+        </div>
       </header>
 
+      {trackerView === "logs" && (
+        <TrackerLogsPanel actionTypes={actionTypes} />
+      )}
+
+      {trackerView === "track" && remoteLogs[MATCH_SECTION]?.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <TrackerMiniLogFeed entries={remoteLogs[MATCH_SECTION] ?? []} />
+        </div>
+      )}
+
+      {trackerView === "track" && (
+      <>
       {/* Panel global por categorías: auto-fill + alineado arriba para que
           las tarjetas conserven su ancho y solo se "recorran" hacia arriba */}
       <div
@@ -1437,44 +1668,13 @@ export default function TrackerPanel({
               </>
               )}
 
-              {res && (
-                <div
-                  style={{
-                    background: "#0a1426",
-                    borderRadius: 8,
-                    padding: 10,
-                    display: "grid",
-                    gap: 4,
-                    fontSize: 13,
-                  }}
-                >
-                  {res.error && <span style={{ color: "#fca5a5" }}>⚠ {res.error}</span>}
-                  {!res.error &&
-                    !res.updated?.length &&
-                    !res.skipped?.length && (
-                      <span style={{ color: "#fbbf24" }}>
-                        Ningún desafío coincide con esa combinación.
-                      </span>
-                    )}
-                  {res.updated?.map((u) => (
-                    <span key={u.id}>
-                      {u.is_completed ? "✅" : "📈"} {u.description} —{" "}
-                      <strong>
-                        {u.current_value}/{u.target_value}
-                      </strong>
-                      {u.is_completed ? " ¡Completado!" : ""}
-                    </span>
-                  ))}
-                  {res.skipped?.map((s) => (
-                    <span key={s.id} style={{ color: "#fbbf24" }}>
-                      ⏸ {s.description} —{" "}
-                      {s.reason === "no_active_match"
-                        ? "requiere partida activa"
-                        : "requiere elegir un lugar con nombre"}
-                    </span>
-                  ))}
-                </div>
+              {(remoteLogs[globalSection(cat.actionCode)]?.length ?? 0) > 0 && (
+                <TrackerMiniLogFeed
+                  entries={remoteLogs[globalSection(cat.actionCode)] ?? []}
+                />
               )}
+
+              {res?.error && <TrackerLocalResultFeed result={res} />}
             </section>
           );
         })}
@@ -1486,6 +1686,11 @@ export default function TrackerPanel({
       </div>
 
       {/* Desafíos por semana */}
+      {(remoteLogs[WEEK_SECTION]?.length ?? 0) > 0 && (
+        <div style={{ marginBottom: 12 }}>
+          <TrackerMiniLogFeed entries={remoteLogs[WEEK_SECTION] ?? []} />
+        </div>
+      )}
       <section style={{ display: "grid", gap: 14 }}>
         <WeekTabs
           seasons={seasons}
@@ -2049,6 +2254,8 @@ export default function TrackerPanel({
             </p>
           )}
       </section>
+      </>
+      )}
       </div>
     </main>
   );
