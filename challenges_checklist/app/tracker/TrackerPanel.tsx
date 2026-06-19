@@ -191,6 +191,74 @@ function deriveCategoryView(
 // una vez por registro)
 const NO_AMOUNT_ACTIONS = ["visit", "dance", "land", "misc"];
 
+const DISCRETE_CONTROL_THRESHOLD = 20;
+
+type MissionControls = {
+  isOptionBased: boolean;
+  isDifferent: boolean;
+  showSlider: boolean;
+  showAmountInput: boolean;
+  showIncrementBulk: boolean;
+  showPlusOne: boolean;
+  showMinusOne: boolean;
+};
+
+function deriveMissionControls(
+  c: Challenge,
+  optionRules: Rule[]
+): MissionControls {
+  const isOptionBased =
+    (optionRules.length >= 2 && c.unit !== "value") ||
+    c.unit === "distinct_location";
+  const isDifferent =
+    c.kind === "progress" && c.match_scope === "different_matches";
+  const target = c.target_value ?? 1;
+  const smallTarget = target <= DISCRETE_CONTROL_THRESHOLD;
+
+  if (isOptionBased) {
+    return {
+      isOptionBased,
+      isDifferent,
+      showSlider: false,
+      showAmountInput: false,
+      showIncrementBulk: false,
+      showPlusOne: false,
+      showMinusOne: false,
+    };
+  }
+  if (isDifferent) {
+    return {
+      isOptionBased,
+      isDifferent,
+      showSlider: false,
+      showAmountInput: false,
+      showIncrementBulk: false,
+      showPlusOne: true,
+      showMinusOne: false,
+    };
+  }
+  if (c.unit === "value") {
+    return {
+      isOptionBased,
+      isDifferent,
+      showSlider: true,
+      showAmountInput: true,
+      showIncrementBulk: true,
+      showPlusOne: false,
+      showMinusOne: false,
+    };
+  }
+  return {
+    isOptionBased,
+    isDifferent,
+    showSlider: smallTarget,
+    showAmountInput: false,
+    showIncrementBulk: false,
+    showPlusOne: true,
+    showMinusOne: smallTarget,
+  };
+}
+
 const CATEGORY_ORDER = [
   "kill",
   "damage",
@@ -1341,7 +1409,7 @@ export default function TrackerPanel({
                   paddingTop: 12,
                 }}
               >
-                {!NO_AMOUNT_ACTIONS.includes(cat.actionCode) && (
+                {!cat.hasValue || NO_AMOUNT_ACTIONS.includes(cat.actionCode) ? null : (
                   <label style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 13, color: "#9fc9f5" }}>
                     Cantidad
                     <input
@@ -1512,26 +1580,12 @@ export default function TrackerPanel({
             const optionRules = (c.challenge_rules ?? []).filter((r) =>
               ruleLabel(r)
             );
-            // "basado en opciones": el progreso viene de eventos discretos
-            // (varios objetivos/lugares, o lugares con nombre distintos), no
-            // de un acumulador numérico. En estos NO tiene sentido el ±1 ni la
-            // barra/cantidad manual (¿qué opción restaría un −1?), ni cuando
-            // ya está completado. Se controla solo con sus chips o el reset.
-            const isOptionBased =
-              (optionRules.length >= 2 && c.unit !== "value") ||
-              c.unit === "distinct_location";
+            const ctrl = deriveMissionControls(c, optionRules);
             const showOptionChips =
-              isOptionBased &&
+              ctrl.isOptionBased &&
               !c.is_completed &&
               !locked &&
               optionRules.length >= 2;
-            // partidas diferentes: solo se avanza de 1 en 1 y una vez por
-            // partida (el RPC lo refuerza; aquí se bloquea el botón)
-            const isDifferent =
-              c.kind === "progress" && c.match_scope === "different_matches";
-            const isDamageChallenge = (c.challenge_rules ?? []).some(
-              (r) => r.action_type?.code === "damage"
-            );
             const addedThisMatch =
               !!activeMatch &&
               (c.challenge_rules ?? []).some((r) =>
@@ -1550,28 +1604,9 @@ export default function TrackerPanel({
                 target={target}
                 completed={c.is_completed}
                 locked={locked}
-                lockedLabel={
-                  prestigeLockedIds.has(c.id)
-                    ? "Completa la semana normal para desbloquear el prestigio"
-                    : undefined
-                }
                 accent={accent}
                 first={!weekMeta && i === 0}
               >
-                {prestigeLockedIds.has(c.id) && (
-                  <span
-                    style={{
-                      display: "flex",
-                      alignItems: "center",
-                      gap: 6,
-                      color: "#fbbf24",
-                      fontSize: fs(12, 17),
-                    }}
-                  >
-                    🔒 Completa los desafíos normales de la semana para
-                    desbloquear este prestigio
-                  </span>
-                )}
                 {showOptionChips && (
                   <div
                     style={{
@@ -1656,11 +1691,7 @@ export default function TrackerPanel({
                   </div>
                 ) : (
                   <div style={{ display: "grid", gap: 8 }}>
-                    {/* los desafíos "basados en opciones" (varios lugares,
-                        lugares distintos…) no usan barra ni ±1: ¿qué opción
-                        restaría un −1? Se manejan con sus chips o el reset.
-                        En partidas diferentes se ajusta de a 1. */}
-                    {!isOptionBased && !isDifferent && (
+                    {ctrl.showSlider && (
                     <input
                       type="range"
                       min={0}
@@ -1696,7 +1727,7 @@ export default function TrackerPanel({
                     />
                     )}
                     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
-                      {!isOptionBased && !isDifferent && (
+                      {ctrl.showAmountInput && (
                         <>
                       <input
                         type="number"
@@ -1721,10 +1752,10 @@ export default function TrackerPanel({
                           opacity: addBlocked ? 0.5 : 1,
                         }}
                       />
+                      {ctrl.showIncrementBulk && (
                       <button
                         disabled={c.is_completed || addBlocked}
                         onClick={() => {
-                          // cantidad vacía o 0: no hace nada
                           const n = Number(customAmounts[c.id]);
                           if (!Number.isFinite(n) || n <= 0) return;
                           increaseProgress(c, Math.floor(n));
@@ -1746,15 +1777,22 @@ export default function TrackerPanel({
                       >
                         Aumentar
                       </button>
+                      )}
                         </>
                       )}
-                      {!isOptionBased && isDifferent && (
+                      {ctrl.showPlusOne && (
                         <button
                           disabled={
-                            c.is_completed || addBlocked || addedThisMatch
+                            c.is_completed ||
+                            addBlocked ||
+                            (ctrl.isDifferent && addedThisMatch)
                           }
                           onClick={() => increaseProgress(c, 1)}
-                          title="Suma 1 (máximo una vez por partida)"
+                          title={
+                            ctrl.isDifferent
+                              ? "Suma 1 (máximo una vez por partida)"
+                              : "Suma 1"
+                          }
                           style={{
                             padding: `${fs(8, 12)} ${fs(14, 22)}`,
                             borderRadius: 8,
@@ -1762,11 +1800,15 @@ export default function TrackerPanel({
                             background: "#1c74e3",
                             color: "white",
                             cursor:
-                              c.is_completed || addBlocked || addedThisMatch
+                              c.is_completed ||
+                              addBlocked ||
+                              (ctrl.isDifferent && addedThisMatch)
                                 ? "not-allowed"
                                 : "pointer",
                             opacity:
-                              c.is_completed || addBlocked || addedThisMatch
+                              c.is_completed ||
+                              addBlocked ||
+                              (ctrl.isDifferent && addedThisMatch)
                                 ? 0.5
                                 : 1,
                             fontSize: fs(13, 19),
@@ -1776,7 +1818,7 @@ export default function TrackerPanel({
                           +1
                         </button>
                       )}
-                      {!isOptionBased && !isDamageChallenge && (
+                      {ctrl.showMinusOne && (
                       <button
                         disabled={locked || current <= 0}
                         onClick={() => increaseProgress(c, -1)}
@@ -1797,7 +1839,7 @@ export default function TrackerPanel({
                         −1
                       </button>
                       )}
-                      {isDifferent && addedThisMatch && !c.is_completed && (
+                      {ctrl.isDifferent && addedThisMatch && !c.is_completed && (
                         <span style={{ color: "#7ef5a8", fontSize: fs(12, 17) }}>
                           ✔ Ya se sumó en esta partida
                         </span>
@@ -1827,7 +1869,10 @@ export default function TrackerPanel({
                           ⚠ Registrar requiere partida activa
                         </span>
                       )}
-                      {matchBlocked && !isOptionBased && !c.is_completed && (
+                      {matchBlocked &&
+                        !ctrl.isOptionBased &&
+                        !c.is_completed &&
+                        (ctrl.showPlusOne || ctrl.showIncrementBulk) && (
                         <span style={{ color: "#fbbf24", fontSize: fs(12, 17) }}>
                           ⚠ Aumentar requiere partida activa
                         </span>

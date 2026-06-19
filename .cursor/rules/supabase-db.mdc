@@ -1,0 +1,31 @@
+---
+description: Migraciones SQL y acceso a Supabase
+globs: challenges_checklist/db/**/*.sql
+alwaysApply: false
+---
+
+# Base de datos Supabase
+
+## Migraciones
+
+Archivos en `challenges_checklist/db/` — aplicar **en orden numérico** (01→20).
+
+| Rango | Contenido |
+|-------|-----------|
+| 01–08 | Motor, Season 8, meta, público, manual RPCs, consumibles, i18n, report_event |
+| 09–12 | Baller, armas ES, misc, reset admin |
+| 13–16 | Prestigio, todas las semanas, guard manual, unlock next-match |
+| 17–20 | Prestigio W1–2 bespoke, rule_group, chug_jug, rule_conditions; W1 text + asalto/francotirador |
+
+## Antes de escribir SQL nuevo
+
+1. Comprobar estado remoto (MCP `execute_sql` o Management API).
+2. Migraciones idempotentes cuando sea posible (patrón de `db/19`).
+3. Tras aplicar en remoto, actualizar **`## Estado remoto (Supabase)`** en `CLAUDE.md`.
+
+## Probar RPCs con auth
+
+```sql
+select set_config('request.jwt.claims', '{"sub":"<user-uuid>","role":"authenticated"}', false);
+-- luego start_match / report_event / etc.
+```
