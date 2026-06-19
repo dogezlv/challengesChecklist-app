@@ -1,0 +1,808 @@
+[
+  {
+    "week": 1,
+    "rows": [
+      {
+        "num": 1,
+        "normal": "Fase 1 de 3: Inflige daño con una escopeta y un arma explosiva en una sola partida",
+        "normalProg": "0/2",
+        "prestige": "Visita las 3 caras gigantes en una sola partida",
+        "prestigeProg": "0/3"
+      },
+      {
+        "num": 2,
+        "normal": "Fase 2 de 3: Inflige daño con una pistola y un fusil de asalto en una sola partida",
+        "normalProg": "0/2",
+        "prestige": "Visita las 3 caras gigantes en una sola partida",
+        "prestigeProg": "0/3"
+      },
+      {
+        "num": 3,
+        "normal": "Fase 3 de 3: Inflige daño con un fusil de francotirador y un subfusil en una sola partida",
+        "normalProg": "0/2",
+        "prestige": "Visita las 3 caras gigantes en una sola partida",
+        "prestigeProg": "0/3"
+      },
+      {
+        "num": 4,
+        "normal": "Visita todos los campamentos piratas",
+        "normalProg": "6/7",
+        "prestige": "Usa 15 respiraderos volcánicos diferentes en la misma partida",
+        "prestigeProg": "0/15"
+      },
+      {
+        "num": 5,
+        "normal": "Inflige daño a un vehículo conducido por un oponente",
+        "normalProg": "0/200",
+        "prestige": "Consigue eliminaciones en Metrópoli Mercantil o Cruce Chatarra",
+        "prestigeProg": "0/3"
+      },
+      {
+        "num": 6,
+        "normal": "Registra cofres en Metrópoli Mercantil o Cruce Chatarra",
+        "normalProg": "0/7",
+        "prestige": "Destruye 3 vehículos conducidos por un oponente",
+        "prestigeProg": "0/3"
+      },
+      {
+        "num": 7,
+        "normal": "Usa un respiradero volcánico en diferentes partidas",
+        "normalProg": "1/5",
+        "prestige": "Consigue una eliminación con un arma explosiva y una escopeta en la misma partida",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 8,
+        "normal": "Visita una cara gigante en el desierto, la jungla y la nieve",
+        "normalProg": "0/3",
+        "prestige": "Visita los 7 campamentos piratas en una sola partida",
+        "prestigeProg": "0/7"
+      },
+      {
+        "num": 9,
+        "normal": "Consigue una eliminación con escopeta, fusil de asalto y arma explosiva",
+        "normalProg": "0/3",
+        "prestige": "Consigue una eliminación con un fusil de asalto y un fusil de francotirador en la misma partida",
+        "prestigeProg": "0/2"
+      }
+    ]
+  },
+  {
+    "week": 2,
+    "rows": [
+      {
+        "num": 10,
+        "normal": "Fase 1 de 5: Aterriza en El Bloque",
+        "normalProg": "0/1",
+        "prestige": "Consigue una eliminación con el cañón pirata",
+        "prestigeProg": "0/1"
+      },
+      {
+        "num": 11,
+        "normal": "Fase 2 de 5: Aterriza en Cráter Catastrófico",
+        "normalProg": "0/1",
+        "prestige": "Consigue una eliminación con el cañón pirata",
+        "prestigeProg": "0/1"
+      },
+      {
+        "num": 12,
+        "normal": "Fase 3 de 5: Aterriza en Pico Polar",
+        "normalProg": "0/1",
+        "prestige": "Consigue una eliminación con el cañón pirata",
+        "prestigeProg": "0/1"
+      },
+      {
+        "num": 13,
+        "normal": "Fase 4 de 5: Aterriza en Costas Clasistas",
+        "normalProg": "0/1",
+        "prestige": "Consigue una eliminación con el cañón pirata",
+        "prestigeProg": "0/1"
+      },
+      {
+        "num": 14,
+        "normal": "Fase 5 de 5: Aterriza en Palmeras Paradisíacas",
+        "normalProg": "0/1",
+        "prestige": "Consigue una eliminación con el cañón pirata",
+        "prestigeProg": "0/1"
+      },
+      {
+        "num": 15,
+        "normal": "Fase 1 de 3: Gana salud con manzanas",
+        "normalProg": "0/25",
+        "prestige": "Registra una entrega de suministros antes de 10 segundos de que aterrice",
+        "prestigeProg": "0/1"
+      },
+      {
+        "num": 16,
+        "normal": "Fase 2 de 3: Gana salud con una hoguera acogedora",
+        "normalProg": "0/50",
+        "prestige": "Registra una entrega de suministros antes de 10 segundos de que aterrice",
+        "prestigeProg": "0/1"
+      },
+      {
+        "num": 17,
+        "normal": "Fase 3 de 3: Gana salud con un botiquín",
+        "normalProg": "0/50",
+        "prestige": "Registra una entrega de suministros antes de 10 segundos de que aterrice",
+        "prestigeProg": "0/1"
+      },
+      {
+        "num": 18,
+        "normal": "Consigue eliminaciones en Salpiconeros Salados o Lomas Lúgubres",
+        "normalProg": "0/3",
+        "prestige": "Visita 2 puntos cardinales opuestos en el mapa en la misma partida",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 19,
+        "normal": "Inflige daño a entregas de suministros mientras descienden",
+        "normalProg": "0/200",
+        "prestige": "Gana salud o escudo con un bidón de plasma",
+        "prestigeProg": "0/180"
+      },
+      {
+        "num": 20,
+        "normal": "Inflige daño a oponentes con un cañón pirata",
+        "normalProg": "100/100",
+        "prestige": "Consigue eliminaciones sin recibir daño entre ellas",
+        "prestigeProg": "0/3"
+      },
+      {
+        "num": 21,
+        "normal": "Registra un cofre en 3 lugares con nombre diferentes en una sola partida",
+        "normalProg": "0/3",
+        "prestige": "Aterriza en Palmeras Paradisíacas y gana la partida",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 22,
+        "normal": "Visita los puntos más al norte, sur, este y oeste de la isla",
+        "normalProg": "0/4",
+        "prestige": "No registres ningún cofre en ubicaciones con nombre y sobrevive a 75 jugadores",
+        "prestigeProg": "0/75"
+      }
+    ]
+  },
+  {
+    "week": 3,
+    "rows": [
+      {
+        "num": 23,
+        "normal": "Fase 1 de 3: Destruye cactus en el desierto",
+        "normalProg": "30/30",
+        "prestige": "Visita Aeroparque Ártico, Terreno Tormentoso y Balsa Botín en una sola partida",
+        "prestigeProg": "0/3"
+      },
+      {
+        "num": 24,
+        "normal": "Fase 2 de 3: Registra cajas de munición en el bioma nevado",
+        "normalProg": "7/7",
+        "prestige": "Visita Aeroparque Ártico, Terreno Tormentoso y Balsa Botín en una sola partida",
+        "prestigeProg": "0/3"
+      },
+      {
+        "num": 25,
+        "normal": "Fase 3 de 3: Registra cofres en la jungla",
+        "normalProg": "2/2",
+        "prestige": "Visita Aeroparque Ártico, Terreno Tormentoso y Balsa Botín en una sola partida",
+        "prestigeProg": "0/3"
+      },
+      {
+        "num": 26,
+        "normal": "Fase 1 de 3: Visita Terreno Tormentoso y Salpiconeros Salados en una sola partida",
+        "normalProg": "2/2",
+        "prestige": "Consigue eliminaciones con trampas",
+        "prestigeProg": "2/2"
+      },
+      {
+        "num": 27,
+        "normal": "Fase 2 de 3: Visita Lomas Lúgubres y Rascacielos Recortados en una sola partida",
+        "normalProg": "2/2",
+        "prestige": "Consigue eliminaciones con trampas",
+        "prestigeProg": "2/2"
+      },
+      {
+        "num": 28,
+        "normal": "Fase 3 de 3: Visita Aeroparque Ártico y Balsa Botín en una sola partida",
+        "normalProg": "2/2",
+        "prestige": "Consigue eliminaciones con trampas",
+        "prestigeProg": "2/2"
+      },
+      {
+        "num": 29,
+        "normal": "Consigue eliminaciones con subfusil, pistola o fusil de francotirador",
+        "normalProg": "3/3",
+        "prestige": "Consigue eliminaciones con disparos a la cabeza",
+        "prestigeProg": "0/3"
+      },
+      {
+        "num": 30,
+        "normal": "Busca donde se posa la lupa en la pantalla de carga del mapa del tesoro",
+        "normalProg": "1/1",
+        "prestige": "Visita Aeroparque Ártico y Balsa Botín en una sola partida",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 31,
+        "normal": "Registra cofres en Escalones Estivales o Terreno Tormentoso",
+        "normalProg": "7/7",
+        "prestige": "Consigue eliminaciones con pistola y fusil de francotirador en la misma partida",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 32,
+        "normal": "Coloca 2 objetos de trampa diferentes en una sola partida",
+        "normalProg": "2/2",
+        "prestige": "Consigue eliminaciones en Escalones Estivales o Terreno Tormentoso",
+        "prestigeProg": "3/3"
+      },
+      {
+        "num": 33,
+        "normal": "Inflige daño de disparos a la cabeza a oponentes",
+        "normalProg": "500/500",
+        "prestige": "Consigue eliminaciones en la jungla",
+        "prestigeProg": "0/3"
+      }
+    ]
+  },
+  {
+    "week": 4,
+    "rows": [
+      {
+        "num": 34,
+        "normal": "Fase 1 de 5: Aterriza en Rascacielos Recortados",
+        "normalProg": "1/1",
+        "prestige": "Gana una partida",
+        "prestigeProg": "1/1"
+      },
+      {
+        "num": 35,
+        "normal": "Fase 2 de 5: Aterriza en Cruce Chatarra",
+        "normalProg": "1/1",
+        "prestige": "Gana una partida",
+        "prestigeProg": "1/1"
+      },
+      {
+        "num": 36,
+        "normal": "Fase 3 de 5: Aterriza en Metrópoli Mercantil",
+        "normalProg": "1/1",
+        "prestige": "Gana una partida",
+        "prestigeProg": "1/1"
+      },
+      {
+        "num": 37,
+        "normal": "Fase 4 de 5: Aterriza en Villa Vivaracha",
+        "normalProg": "1/1",
+        "prestige": "Gana una partida",
+        "prestigeProg": "1/1"
+      },
+      {
+        "num": 38,
+        "normal": "Fase 5 de 5: Aterriza en Parque Placentero",
+        "normalProg": "1/1",
+        "prestige": "Gana una partida",
+        "prestigeProg": "1/1"
+      },
+      {
+        "num": 39,
+        "normal": "Fase 1 de 3: Sobrevive a 60 oponentes en una sola partida",
+        "normalProg": "60/60",
+        "prestige": "Consigue una eliminación con un arma con mira y otra con un arma silenciada en la misma partida",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 40,
+        "normal": "Fase 2 de 3: Sobrevive a 70 oponentes en una sola partida",
+        "normalProg": "70/70",
+        "prestige": "Consigue una eliminación con un arma con mira y otra con un arma silenciada en la misma partida",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 41,
+        "normal": "Fase 3 de 3: Sobrevive a 80 oponentes en una sola partida",
+        "normalProg": "80/80",
+        "prestige": "Consigue una eliminación con un arma con mira y otra con un arma silenciada en la misma partida",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 42,
+        "normal": "Usa el Boloncho en diferentes partidas",
+        "normalProg": "5/5",
+        "prestige": "Impacta a un enemigo contigo como bola de cañón",
+        "prestigeProg": "1/1"
+      },
+      {
+        "num": 43,
+        "normal": "Elimina oponentes en Villa Vivaracha o Parque Placentero",
+        "normalProg": "3/3",
+        "prestige": "Visita la cancha de fútbol de Parque Placentero y la torre del reloj de Rascacielos Recortados en la misma partida",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 44,
+        "normal": "Lánzate a través de estructuras con un cañón pirata",
+        "normalProg": "25/25",
+        "prestige": "Destruye 5 bolonchos en la misma partida",
+        "prestigeProg": "0/5"
+      },
+      {
+        "num": 45,
+        "normal": "Busca tesoros enterrados",
+        "normalProg": "2/2",
+        "prestige": "Busca una entrega de suministros y un tesoro enterrado en la misma partida",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 46,
+        "normal": "Consigue una eliminación con un arma con mira y otra con un arma silenciada",
+        "normalProg": "2/2",
+        "prestige": "Consigue una eliminación con un arma con mira y otra con un arma silenciada (en una sola partida)",
+        "prestigeProg": "0/2"
+      }
+    ]
+  },
+  {
+    "week": 5,
+    "rows": [
+      {
+        "num": 47,
+        "normal": "Fase 1 de 3: Gana escudo con setas",
+        "normalProg": "50/50",
+        "prestige": "Gana escudo con un jugo de sorbete",
+        "prestigeProg": "0/150"
+      },
+      {
+        "num": 48,
+        "normal": "Fase 2 de 3: Gana escudo con pociones de escudo pequeñas",
+        "normalProg": "100/100",
+        "prestige": "Gana escudo con un jugo de sorbete",
+        "prestigeProg": "0/150"
+      },
+      {
+        "num": 49,
+        "normal": "Fase 3 de 3: Gana escudo con pociones de escudo",
+        "normalProg": "100/100",
+        "prestige": "Gana escudo con un jugo de sorbete",
+        "prestigeProg": "0/150"
+      },
+      {
+        "num": 50,
+        "normal": "Registra cofres en Palmeras Paradisíacas o Conductos Cambiantes",
+        "normalProg": "7/7",
+        "prestige": "Completa una vuelta a la pista de carreras de Villa Vivaracha con un Quad Crasher",
+        "prestigeProg": "1/1"
+      },
+      {
+        "num": 51,
+        "normal": "Inflige daño con armas con mira a oponentes",
+        "normalProg": "200/200",
+        "prestige": "Usa un cañón pirata para dispararte hacia dentro del volcán",
+        "prestigeProg": "1/1"
+      },
+      {
+        "num": 52,
+        "normal": "Completa una vuelta a la pista de carreras de Villa Vivaracha",
+        "normalProg": "1/1",
+        "prestige": "Usa el volcán para impulsarte, una patineta y un arbusto en la misma partida",
+        "prestigeProg": "0/3"
+      },
+      {
+        "num": 53,
+        "normal": "Usa un respiradero volcánico, una tirolina y un vehículo en la misma partida",
+        "normalProg": "3/3",
+        "prestige": "Elimina oponentes en campamentos piratas diferentes",
+        "prestigeProg": "0/4"
+      },
+      {
+        "num": 54,
+        "normal": "Elimina oponentes en campamentos piratas",
+        "normalProg": "3/3",
+        "prestige": "Completa una vuelta a la pista de carreras de Villa Vivaracha (2 veces en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 55,
+        "normal": "Consigue 15 botes en un solo lanzamiento con la pelota saltarina",
+        "normalProg": "1/1",
+        "prestige": "Elimina oponentes con armas con mira",
+        "prestigeProg": "2/2"
+      }
+    ]
+  },
+  {
+    "week": 6,
+    "rows": [
+      {
+        "num": 56,
+        "normal": "Fase 1 de 5: Aterriza en Terreno Tormentoso",
+        "normalProg": "0/1",
+        "prestige": "Baila en las elevaciones más altas de la isla (en una sola partida)",
+        "prestigeProg": "0/5"
+      },
+      {
+        "num": 57,
+        "normal": "Fase 2 de 5: Aterriza en Laguna Fortuna",
+        "normalProg": "0/1",
+        "prestige": "Baila en las elevaciones más altas de la isla (en una sola partida)",
+        "prestigeProg": "0/5"
+      },
+      {
+        "num": 58,
+        "normal": "Fase 3 de 5: Aterriza en Conductos Cambiantes",
+        "normalProg": "0/1",
+        "prestige": "Baila en las elevaciones más altas de la isla (en una sola partida)",
+        "prestigeProg": "0/5"
+      },
+      {
+        "num": 59,
+        "normal": "Fase 4 de 5: Aterriza en Aeroparque Ártico",
+        "normalProg": "0/1",
+        "prestige": "Baila en las elevaciones más altas de la isla (en una sola partida)",
+        "prestigeProg": "0/5"
+      },
+      {
+        "num": 60,
+        "normal": "Fase 5 de 5: Aterriza en Escalones Estivales",
+        "normalProg": "0/1",
+        "prestige": "Baila en las elevaciones más altas de la isla (en una sola partida)",
+        "prestigeProg": "0/5"
+      },
+      {
+        "num": 61,
+        "normal": "Elimina oponentes en Laguna Fortuna o Aeroparque Ártico",
+        "normalProg": "0/3",
+        "prestige": "Consigue una eliminación con una pistola de mecha o un arco explosivo (2 veces en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 62,
+        "normal": "Busca donde apunta el cuchillo en la pantalla de carga del mapa del tesoro",
+        "normalProg": "0/1",
+        "prestige": "Busca donde apunta el cuchillo en la pantalla de carga del mapa del tesoro (2 veces en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 63,
+        "normal": "Baila en las elevaciones más altas de la isla",
+        "normalProg": "0/5",
+        "prestige": "Elimina oponentes en Laguna Fortuna o Aeroparque Ártico (en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 64,
+        "normal": "Usa 2 objetos arrojadizos diferentes en una sola partida",
+        "normalProg": "0/2",
+        "prestige": "Usa 2 objetos arrojadizos diferentes en una sola partida",
+        "prestigeProg": "0/4"
+      },
+      {
+        "num": 65,
+        "normal": "Consigue una eliminación con una pistola de mecha o un arco explosivo",
+        "normalProg": "0/1",
+        "prestige": "Visita un conejo de madera, un cerdo de piedra y una llama de metal (en una sola partida)",
+        "prestigeProg": "0/3"
+      },
+      {
+        "num": 66,
+        "normal": "Visita un conejo de madera, un cerdo de piedra y una llama de metal",
+        "normalProg": "0/3",
+        "prestige": "Aterriza en Escalones Estivales (2 veces en una sola partida)",
+        "prestigeProg": "0/2"
+      }
+    ]
+  },
+  {
+    "week": 7,
+    "rows": [
+      {
+        "num": 67,
+        "normal": "Fase 1 de 2: Inflige daño a un oponente mientras montas en una tirolina",
+        "normalProg": "0/1",
+        "prestige": "Inflige daño con el pico a oponentes",
+        "prestigeProg": "0/300"
+      },
+      {
+        "num": 68,
+        "normal": "Fase 2 de 2: Inflige daño a un oponente que monta en una tirolina",
+        "normalProg": "0/1",
+        "prestige": "Inflige daño con el pico a oponentes",
+        "prestigeProg": "0/300"
+      },
+      {
+        "num": 69,
+        "normal": "Fase 1 de 3: Visita Cruce Chatarra y El Bloque en una sola partida",
+        "normalProg": "0/2",
+        "prestige": "Registra cofres en Balsa Botín o Costas Clasistas (en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 70,
+        "normal": "Fase 2 de 3: Visita Parque Placentero y Cráter Catastrófico en una sola partida",
+        "normalProg": "0/2",
+        "prestige": "Registra cofres en Balsa Botín o Costas Clasistas (en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 71,
+        "normal": "Fase 3 de 3: Visita Villa Vivaracha y Costas Clasistas en una sola partida",
+        "normalProg": "0/2",
+        "prestige": "Registra cofres en Balsa Botín o Costas Clasistas (en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 72,
+        "normal": "Registra cofres en Balsa Botín o Costas Clasistas",
+        "normalProg": "0/7",
+        "prestige": "Elimina oponentes en 5 lugares con nombre diferentes",
+        "prestigeProg": "0/7"
+      },
+      {
+        "num": 73,
+        "normal": "Elimina oponentes en 5 lugares con nombre diferentes",
+        "normalProg": "3/5",
+        "prestige": "Inflige daño a un oponente que monta en una tirolina (2 veces en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 74,
+        "normal": "Inflige daño a jugadores desde arriba",
+        "normalProg": "0/500",
+        "prestige": "Visita Villa Vivaracha y Costas Clasistas en una sola partida",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 75,
+        "normal": "Visita campamentos piratas en una sola partida",
+        "normalProg": "0/3",
+        "prestige": "Inflige daño a jugadores desde arriba",
+        "prestigeProg": "0/1500"
+      },
+      {
+        "num": 76,
+        "normal": "Inflige daño con el pico a oponentes",
+        "normalProg": "0/100",
+        "prestige": "Visita campamentos piratas en una sola partida",
+        "prestigeProg": "0/7"
+      }
+    ]
+  },
+  {
+    "week": 8,
+    "rows": [
+      {
+        "num": 77,
+        "normal": "Fase 1 de 2: Busca el letrero del mapa del tesoro en Palmeras Paradisíacas",
+        "normalProg": "0/1",
+        "prestige": "Busca piezas de puzle debajo de puentes y en cuevas (en una sola partida)",
+        "prestigeProg": "0/14"
+      },
+      {
+        "num": 78,
+        "normal": "Fase 2 de 2: Sigue el letrero del mapa del tesoro de Palmeras Paradisíacas",
+        "normalProg": "0/1",
+        "prestige": "Busca piezas de puzle debajo de puentes y en cuevas (en una sola partida)",
+        "prestigeProg": "0/14"
+      },
+      {
+        "num": 79,
+        "normal": "Fase 1 de 2: Marca el número de Durr Burger en el teléfono gigante al oeste de Terreno Tormentoso",
+        "normalProg": "0/1",
+        "prestige": "Usa máquinas expendedoras en diferentes partidas",
+        "prestigeProg": "0/5"
+      },
+      {
+        "num": 80,
+        "normal": "Fase 2 de 2: Marca el número de Pizza Pit en el teléfono gigante al este de El Bloque",
+        "normalProg": "0/1",
+        "prestige": "Usa máquinas expendedoras en diferentes partidas",
+        "prestigeProg": "0/5"
+      },
+      {
+        "num": 81,
+        "normal": "Elimina oponentes en Cráter Catastrófico o Aterrizaje Afortunado",
+        "normalProg": "0/7",
+        "prestige": "Sigue el letrero del mapa del tesoro de Palmeras Paradisíacas (2 veces en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 82,
+        "normal": "Busca piezas de puzle debajo de puentes y en cuevas",
+        "normalProg": "0/7",
+        "prestige": "Marca el número de Pizza Pit en el teléfono gigante al este de El Bloque (2 veces en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 83,
+        "normal": "Usa máquinas expendedoras en diferentes partidas",
+        "normalProg": "0/3",
+        "prestige": "Elimina oponentes a al menos 50 m de distancia (en una sola partida)",
+        "prestigeProg": "0/4"
+      },
+      {
+        "num": 84,
+        "normal": "Inflige daño a oponentes usando al menos un globo",
+        "normalProg": "0/100",
+        "prestige": "Elimina oponentes en Cráter Catastrófico o Aterrizaje Afortunado (en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 85,
+        "normal": "Elimina oponentes a al menos 50 m de distancia",
+        "normalProg": "0/2",
+        "prestige": "Inflige daño a oponentes usando al menos un globo",
+        "prestigeProg": "0/300"
+      }
+    ]
+  },
+  {
+    "week": 9,
+    "rows": [
+      {
+        "num": 86,
+        "normal": "Fase 1 de 5: Aterriza en Balsa Botín",
+        "normalProg": "0/1",
+        "prestige": "Inflige daño a oponentes desde abajo",
+        "prestigeProg": "0/1500"
+      },
+      {
+        "num": 87,
+        "normal": "Fase 2 de 5: Aterriza en Aterrizaje Afortunado",
+        "normalProg": "0/1",
+        "prestige": "Inflige daño a oponentes desde abajo",
+        "prestigeProg": "0/1500"
+      },
+      {
+        "num": 88,
+        "normal": "Fase 3 de 5: Aterriza en Salpiconeros Salados",
+        "normalProg": "0/1",
+        "prestige": "Inflige daño a oponentes desde abajo",
+        "prestigeProg": "0/1500"
+      },
+      {
+        "num": 89,
+        "normal": "Fase 4 de 5: Aterriza en Casas Cabañiles",
+        "normalProg": "0/1",
+        "prestige": "Inflige daño a oponentes desde abajo",
+        "prestigeProg": "0/1500"
+      },
+      {
+        "num": 90,
+        "normal": "Fase 5 de 5: Aterriza en Lomas Lúgubres",
+        "normalProg": "0/1",
+        "prestige": "Inflige daño a oponentes desde abajo",
+        "prestigeProg": "0/1500"
+      },
+      {
+        "num": 91,
+        "normal": "Fase 1 de 3: Baila entre tres esculturas de hielo",
+        "normalProg": "0/1",
+        "prestige": "Registra cofres en Pico Polar o Casas Cabañiles (en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 92,
+        "normal": "Fase 2 de 3: Baila entre tres dinosaurios",
+        "normalProg": "0/1",
+        "prestige": "Registra cofres en Pico Polar o Casas Cabañiles (en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 93,
+        "normal": "Fase 3 de 3: Baila entre cuatro aguas termales",
+        "normalProg": "0/1",
+        "prestige": "Registra cofres en Pico Polar o Casas Cabañiles (en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 94,
+        "normal": "Elimina a un oponente en diferentes partidas",
+        "normalProg": "3/5",
+        "prestige": "Elimina a un oponente en diferentes partidas",
+        "prestigeProg": "0/7"
+      },
+      {
+        "num": 95,
+        "normal": "Reanima a un compañero en una furgoneta de reinicio",
+        "normalProg": "0/1",
+        "prestige": "Baila entre cuatro aguas termales (2 veces en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 96,
+        "normal": "Monta en 3 respiraderos volcánicos diferentes sin aterrizar",
+        "normalProg": "0/1",
+        "prestige": "Monta en 3 respiraderos volcánicos diferentes sin aterrizar (2 veces en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 97,
+        "normal": "Registra cofres en Pico Polar o Casas Cabañiles",
+        "normalProg": "0/7",
+        "prestige": "Reanima a un compañero en una furgoneta de reinicio (2 veces en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 98,
+        "normal": "Inflige daño a oponentes desde abajo",
+        "normalProg": "0/500",
+        "prestige": "Aterriza en Lomas Lúgubres (2 veces en una sola partida)",
+        "prestigeProg": "0/2"
+      }
+    ]
+  },
+  {
+    "week": 10,
+    "rows": [
+      {
+        "num": 99,
+        "normal": "Fase 1 de 3: Recolecta 500 de madera en una sola partida",
+        "normalProg": "0/500",
+        "prestige": "Utiliza un cañón pirata en todos los campamentos piratas para llegar a una ubicación con nombre (en una sola partida)",
+        "prestigeProg": "0/7"
+      },
+      {
+        "num": 100,
+        "normal": "Fase 2 de 3: Recolecta 400 de piedra en una sola partida",
+        "normalProg": "0/400",
+        "prestige": "Utiliza un cañón pirata en todos los campamentos piratas para llegar a una ubicación con nombre (en una sola partida)",
+        "prestigeProg": "0/7"
+      },
+      {
+        "num": 101,
+        "normal": "Fase 3 de 3: Recolecta 300 de metal en una sola partida",
+        "normalProg": "0/300",
+        "prestige": "Utiliza un cañón pirata en todos los campamentos piratas para llegar a una ubicación con nombre (en una sola partida)",
+        "prestigeProg": "0/7"
+      },
+      {
+        "num": 102,
+        "normal": "Fase 1 de 2: Busca el letrero del mapa del tesoro en Cruce Chatarra",
+        "normalProg": "0/1",
+        "prestige": "Elimina oponentes en Rascacielos Recortados o El Bloque (en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 103,
+        "normal": "Fase 2 de 2: Sigue el letrero del mapa del tesoro de Cruce Chatarra",
+        "normalProg": "0/1",
+        "prestige": "Elimina oponentes en Rascacielos Recortados o El Bloque (en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 104,
+        "normal": "Utiliza un cañón pirata en todos los campamentos piratas para llegar a una ubicación con nombre",
+        "normalProg": "5/7",
+        "prestige": "Inflige daño en los 10 segundos posteriores a usar un respiradero volcánico",
+        "prestigeProg": "0/300"
+      },
+      {
+        "num": 105,
+        "normal": "Elimina oponentes en Rascacielos Recortados o El Bloque",
+        "normalProg": "0/3",
+        "prestige": "Sigue el letrero del mapa del tesoro de Cruce Chatarra (2 veces en una sola partida)",
+        "prestigeProg": "0/2"
+      },
+      {
+        "num": 106,
+        "normal": "Inflige daño en los 10 segundos posteriores a usar un respiradero volcánico",
+        "normalProg": "0/100",
+        "prestige": "Inflige daño con un fusil de infantería o un fusil de asalto pesado",
+        "prestigeProg": "0/1500"
+      },
+      {
+        "num": 107,
+        "normal": "Inflige daño con un fusil de infantería o un fusil de asalto pesado",
+        "normalProg": "0/500",
+        "prestige": "Elimina oponentes a menos de 5 m de distancia (en una sola partida)",
+        "prestigeProg": "0/4"
+      },
+      {
+        "num": 108,
+        "normal": "Elimina oponentes a menos de 5 m de distancia",
+        "normalProg": "0/2",
+        "prestige": "Recolecta 300 de metal en una sola partida",
+        "prestigeProg": "0/900"
+      }
+    ]
+  }
+]

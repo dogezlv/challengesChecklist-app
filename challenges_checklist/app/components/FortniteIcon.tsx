@@ -17,6 +17,7 @@ const EMOJI_BY_CODE: Record<string, string> = {
   stone_pig: "🐷",
   metal_llama: "🦙",
   giant_face: "🗿",
+  pirate_flag: "🏴‍☠️",
 };
 
 // Imagen de public/icons/<code>.png con fallback a emoji si no existe.

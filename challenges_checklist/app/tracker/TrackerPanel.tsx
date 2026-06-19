@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import FortniteIcon from "../components/FortniteIcon";
+import AdminBulkMenu from "../components/AdminBulkMenu";
+import { getMissionVisual } from "../lib/missionAssets";
 import LogoutButton from "../components/LogoutButton";
 import MissionRow from "../components/MissionRow";
 import BattlePassBanner from "../components/BattlePassBanner";
@@ -12,6 +14,7 @@ import SearchBox from "../components/SearchBox";
 import WeekTabs from "../components/WeekTabs";
 import TopNav from "../components/TopNav";
 import { contentWrap, fnt, fs, pageMain, panel, titleFont, weekAccent, yellowButton } from "../lib/theme";
+import { specialLandKind } from "../lib/specialMissions";
 import type { Season, Week } from "../lib/selection";
 import {
   ACTION_EMOJI,
@@ -26,6 +29,7 @@ import {
   type Named,
   type Rule,
 } from "../lib/types";
+import { isPanelMiscChallenge } from "../lib/trackerUtils";
 
 // fila de match_rule_progress para marcar qué parte de un desafío
 // multi-opción ya está registrada
@@ -177,6 +181,22 @@ function deriveCategoryView(
     })
   );
 
+  // cañón pirata → destino con nombre: ofrecer POIs con nombre
+  if (
+    covered.some((r) => r.conds.some((c) => c.key === "arrived_named_location"))
+  ) {
+    for (const l of namedLocations) locs.set(l.id, l);
+  }
+
+  // aterrizaje tras 3 respiraderos: elegir POI con nombre en el panel Aterrizar
+  if (
+    cat.rules.some((r) =>
+      r.conds.some((c) => c.key === "named_landing_after_3_vents")
+    )
+  ) {
+    for (const l of namedLocations) locs.set(l.id, l);
+  }
+
   const byLabel = (a: { label: string }, b: { label: string }) =>
     a.label.localeCompare(b.label);
   return {
@@ -190,6 +210,7 @@ function deriveCategoryView(
 // acciones donde una "cantidad" no tiene sentido (se visita/baila/aterriza
 // una vez por registro)
 const NO_AMOUNT_ACTIONS = ["visit", "dance", "land", "misc"];
+const QUANTITY_ACTIONS = ["use", "destroy", "gain", "harvest"];
 
 const DISCRETE_CONTROL_THRESHOLD = 20;
 
@@ -203,6 +224,24 @@ type MissionControls = {
   showMinusOne: boolean;
 };
 
+function challengeRuleActions(c: Challenge): Set<string> {
+  return new Set(
+    (c.challenge_rules ?? [])
+      .map((r) => r.action_type?.code)
+      .filter((code): code is string => !!code)
+  );
+}
+
+function isQuantityMission(c: Challenge, optionRules: Rule[]): boolean {
+  if (c.unit === "value") return true;
+  if (c.unit !== "count") return false;
+  const actions = challengeRuleActions(c);
+  if (!actions.size) return false;
+  return [...actions].every((a) =>
+    ["use", "destroy", "gain", "harvest"].includes(a)
+  );
+}
+
 function deriveMissionControls(
   c: Challenge,
   optionRules: Rule[]
@@ -214,6 +253,7 @@ function deriveMissionControls(
     c.kind === "progress" && c.match_scope === "different_matches";
   const target = c.target_value ?? 1;
   const smallTarget = target <= DISCRETE_CONTROL_THRESHOLD;
+  const quantityMission = isQuantityMission(c, optionRules);
 
   if (isOptionBased) {
     return {
@@ -237,15 +277,15 @@ function deriveMissionControls(
       showMinusOne: false,
     };
   }
-  if (c.unit === "value") {
+  if (c.unit === "value" || quantityMission) {
     return {
       isOptionBased,
       isDifferent,
-      showSlider: true,
+      showSlider: c.unit === "value" || smallTarget,
       showAmountInput: true,
-      showIncrementBulk: true,
-      showPlusOne: false,
-      showMinusOne: false,
+      showIncrementBulk: c.unit === "value" || quantityMission,
+      showPlusOne: c.unit === "count",
+      showMinusOne: c.unit === "count" && smallTarget,
     };
   }
   return {
@@ -274,6 +314,12 @@ const CATEGORY_ORDER = [
   "revive",
   "misc",
 ];
+
+function ruleNeedsNamedArrival(r: Rule): boolean {
+  return r.rule_conditions.some(
+    (c) => c.condition_key === "arrived_named_location"
+  );
+}
 
 export default function TrackerPanel({
   seasons,
@@ -317,14 +363,16 @@ export default function TrackerPanel({
   const [selections, setSelections] = useState<Record<string, Selection>>({});
   const [results, setResults] = useState<Record<string, ReportResult>>({});
   const [busyAction, setBusyAction] = useState<string | null>(null);
+  const [busyMatch, setBusyMatch] = useState(false);
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
   const [busyRule, setBusyRule] = useState<string | null>(null);
+  const [cannonArrivalByChallenge, setCannonArrivalByChallenge] = useState<
+    Record<string, string>
+  >({});
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState("");
-  const [confirmReset, setConfirmReset] = useState(false);
   // vista de prestigio en el panel por semana (no mezclar con los normales)
   const [prestigeView, setPrestigeView] = useState(false);
-  const [resetting, setResetting] = useState(false);
 
   // re-sincroniza cuando el servidor manda otra temporada (ajuste de estado
   // durante el render comparando la prop anterior, sin efecto)
@@ -422,17 +470,16 @@ export default function TrackerPanel({
     [namedLocations]
   );
 
-  // Misiones misceláneas pendientes (acción "misc"): su sección no muestra
-  // chips/condiciones, sino la misión completa con un botón para completarla.
+  // Solo misiones con exactamente 1 regla misc (multi-regla → vista semanal).
   const miscChallenges = useMemo(
     () =>
       challenges.filter(
         (c) =>
+          isPanelMiscChallenge(c) &&
           !c.is_completed &&
           !c.is_meta &&
           !lockedIds.has(c.id) &&
-          !prestigeLockedIds.has(c.id) &&
-          (c.challenge_rules ?? []).some((r) => r.action_type?.code === "misc")
+          !prestigeLockedIds.has(c.id)
       ),
     [challenges, lockedIds, prestigeLockedIds]
   );
@@ -466,7 +513,12 @@ export default function TrackerPanel({
     };
 
     for (const c of challenges) {
-      if (c.is_completed || c.is_meta || lockedIds.has(c.id) || prestigeLockedIds.has(c.id))
+      if (
+        c.is_completed ||
+        c.is_meta ||
+        lockedIds.has(c.id) ||
+        prestigeLockedIds.has(c.id)
+      )
         continue;
       const totalRules = c.challenge_rules?.length ?? 0;
 
@@ -474,8 +526,17 @@ export default function TrackerPanel({
         const code = r.action_type?.code;
         if (!code) continue;
 
-        // opción ya satisfecha (registrada y sin posibilidad de aportar más
-        // ahora mismo): no se ofrece, solo estorbaría al supervisor
+        if (
+          code === "misc" &&
+          r.rule_conditions.some((rc) => rc.condition_key === "win_match") &&
+          !r.rule_conditions.some(
+            (rc) => rc.condition_key === "only_vending_weapons"
+          )
+        ) {
+          continue;
+        }
+
+        // opción ya satisfecha
         let satisfied = false;
         if (
           c.match_scope === "any_match" &&
@@ -526,6 +587,7 @@ export default function TrackerPanel({
         const acc = getAcc(code);
         acc.pending.add(c.id);
         if (c.unit === "value") acc.hasValue = true;
+        if (QUANTITY_ACTIONS.includes(code)) acc.hasValue = true;
 
         const usedOption = r.required_object
           ? toOption("obj", r.required_object)
@@ -643,7 +705,10 @@ export default function TrackerPanel({
         return;
       }
       amount = Math.floor(parsed);
-    } else if (cat.hasValue) {
+    } else if (
+      cat.hasValue &&
+      !QUANTITY_ACTIONS.includes(cat.actionCode)
+    ) {
       setResults((prev) => ({
         ...prev,
         [cat.actionCode]: {
@@ -684,26 +749,43 @@ export default function TrackerPanel({
   }
 
   async function startMatch() {
+    setBusyMatch(true);
     const { error } = await supabase.rpc("start_match");
+    setBusyMatch(false);
     if (error) alert(error.message);
     loadMatch();
     loadChallenges();
   }
 
   async function endMatch() {
+    setBusyMatch(true);
     const { error } = await supabase.rpc("end_active_match");
+    setBusyMatch(false);
     if (error) alert(error.message);
     loadMatch();
     loadChallenges();
   }
 
-  // solo admin: borra TODO el progreso de misiones y todas las partidas
-  async function resetAll() {
-    setResetting(true);
-    const { error } = await supabase.rpc("reset_all_progress");
-    setResetting(false);
-    setConfirmReset(false);
-    if (error) alert(error.message);
+  /** Victoria: aplica win_match a lo pendiente y cierra la partida. */
+  async function winMatch() {
+    if (!activeMatch) {
+      alert("Requiere una partida activa.");
+      return;
+    }
+    setBusyMatch(true);
+    const { error } = await supabase.rpc("report_event", {
+      p_action_code: "misc",
+      p_amount: 1,
+      p_conditions: ["win_match"],
+    });
+    if (error) {
+      setBusyMatch(false);
+      alert(error.message);
+      return;
+    }
+    const { error: endErr } = await supabase.rpc("end_active_match");
+    setBusyMatch(false);
+    if (endErr) alert(endErr.message);
     loadMatch();
     loadChallenges();
   }
@@ -755,14 +837,23 @@ export default function TrackerPanel({
 
   // etiqueta que distingue cada opción dentro del desafío
   function ruleLabel(r: Rule): string | null {
+    const fromCamp = r.rule_conditions.find((c) =>
+      c.condition_key.startsWith("from_pirate_camp_")
+    );
     const parts = [
       r.required_object?.display_name ?? r.required_tag?.display_name,
       r.target_object?.display_name ?? r.target_tag?.display_name,
       r.location?.display_name,
+      fromCamp?.condition_value,
     ].filter((p): p is string => !!p);
-    if (!parts.length && r.rule_conditions.length)
+    if (!parts.length && r.rule_conditions.length) {
       return r.rule_conditions.map((c) => c.condition_value).join(" · ");
+    }
     return parts.length ? parts.join(" · ") : null;
+  }
+
+  function ruleConditionKeys(r: Rule): string[] {
+    return r.rule_conditions.map((rc) => rc.condition_key);
   }
 
   // ¿esta opción ya quedó registrada? (acumulador global para any_match;
@@ -788,6 +879,13 @@ export default function TrackerPanel({
 
   async function registerRule(c: Challenge, r: Rule) {
     if (!r.action_type) return;
+    const needsArrival = ruleNeedsNamedArrival(r);
+    const arrivalLoc = cannonArrivalByChallenge[c.id] ?? null;
+    if (needsArrival && (!arrivalLoc || !namedLocIds.has(arrivalLoc))) {
+      alert("Elige la ubicación con nombre donde caíste antes de registrar.");
+      return;
+    }
+    const conditions = ruleConditionKeys(r);
     setBusyRule(r.id);
     const { data, error } = await supabase.rpc("report_event", {
       p_action_code: r.action_type.code,
@@ -796,8 +894,10 @@ export default function TrackerPanel({
       p_used_tag_id: r.required_tag?.id ?? null,
       p_target_object_id: r.target_object?.id ?? null,
       p_target_tag_id: r.target_tag?.id ?? null,
-      p_location_id: r.location?.id ?? null,
-      p_conditions: r.rule_conditions.map((rc) => rc.condition_key),
+      p_location_id: needsArrival
+        ? arrivalLoc
+        : (r.location?.id ?? null),
+      p_conditions: conditions,
     });
     setBusyRule(null);
 
@@ -1019,65 +1119,29 @@ export default function TrackerPanel({
     <main style={pageMain}>
       <PageBackground />
       <div style={contentWrap}>
-      {/* Barra de navegación */}
       <TopNav
+        sticky
         tabs={navTabs}
         right={
           <>
-            {isAdmin &&
-              (confirmReset ? (
-                <>
-                  <button
-                    onClick={resetAll}
-                    disabled={resetting}
-                    style={{
-                      padding: "6px 12px",
-                      borderRadius: 6,
-                      border: "none",
-                      background: fnt.red,
-                      color: "white",
-                      fontWeight: 700,
-                      fontSize: 13,
-                      cursor: resetting ? "not-allowed" : "pointer",
-                      opacity: resetting ? 0.6 : 1,
-                    }}
-                  >
-                    {resetting ? "Reiniciando…" : "¿Seguro? Reiniciar todo"}
-                  </button>
-                  <button
-                    onClick={() => setConfirmReset(false)}
-                    disabled={resetting}
-                    style={{
-                      background: "transparent",
-                      border: "none",
-                      color: fnt.textDim,
-                      fontWeight: 700,
-                      cursor: "pointer",
-                    }}
-                  >
-                    Cancelar
-                  </button>
-                </>
-              ) : (
-                <button
-                  onClick={() => setConfirmReset(true)}
-                  style={{
-                    padding: "8px 14px",
-                    borderRadius: 6,
-                    background: "linear-gradient(180deg, #e1493a 0%, #b3271a 100%)",
-                    border: "none",
-                    color: "white",
-                    fontWeight: 700,
-                    fontSize: 14,
-                    cursor: "pointer",
-                  }}
-                >
-                  Reiniciar todo
-                </button>
-              ))}
+            {isAdmin && (
+              <AdminBulkMenu
+                onDone={() => {
+                  loadMatch();
+                  loadChallenges();
+                }}
+              />
+            )}
             <LogoutButton />
           </>
         }
+        matchControls={{
+          activeMatch,
+          busy: busyMatch,
+          onStart: startMatch,
+          onWin: winMatch,
+          onEnd: endMatch,
+        }}
       />
 
       {/* Título */}
@@ -1109,79 +1173,6 @@ export default function TrackerPanel({
           </span>
         </div>
       </header>
-
-      {/* Control de partida: viaja fijo arriba dentro de una FRANJA a todo el
-          ancho de la página (márgenes negativos anulan el padding del main),
-          con fondo translúcido + blur y aire abajo, para que al hacer scroll
-          el contenido pase por detrás de una banda limpia y no se vea colarse
-          por los lados de la tarjeta */}
-      <div
-        style={{
-          position: "sticky",
-          top: 0,
-          zIndex: 50,
-          margin: "0 -26px 18px",
-          padding: "16px 26px 22px",
-          background: "rgba(5, 30, 66, 0.9)",
-          backdropFilter: "blur(10px)",
-          WebkitBackdropFilter: "blur(10px)",
-          borderBottom: `3px solid ${fnt.border}`,
-          boxShadow: "0 10px 24px rgba(0, 0, 0, 0.4)",
-        }}
-      >
-      <section
-        style={{
-          ...card,
-          background:
-            "linear-gradient(120deg, rgba(16,70,140,0.85) 0%, rgba(20,100,120,0.8) 100%)",
-          border: activeMatch
-            ? `1px solid ${fnt.green}`
-            : `1px solid ${fnt.border}`,
-          display: "flex",
-          alignItems: "center",
-          gap: 16,
-          flexWrap: "wrap",
-          boxShadow: activeMatch
-            ? "0 0 14px rgba(52, 211, 153, 0.35)"
-            : "0 0 14px rgba(124, 202, 250, 0.3)",
-        }}
-      >
-        {activeMatch ? (
-          <>
-            <span style={{ fontWeight: 700 }}>
-              🟢 Partida activa desde{" "}
-              {new Date(activeMatch.started_at).toLocaleTimeString()}
-            </span>
-            <button
-              onClick={endMatch}
-              style={{
-                ...button,
-                background: "linear-gradient(180deg, #f87171 0%, #b91c1c 100%)",
-              }}
-            >
-              Terminar partida
-            </button>
-          </>
-        ) : (
-          <>
-            <span style={{ fontWeight: 700 }}>⚪ Sin partida activa</span>
-            <button
-              onClick={startMatch}
-              style={{
-                ...button,
-                background: "linear-gradient(180deg, #7ef5a8 0%, #15803d 100%)",
-              }}
-            >
-              Iniciar partida
-            </button>
-          </>
-        )}
-        <span style={{ color: "#9fc9f5", fontSize: 13 }}>
-          Los desafíos de &quot;misma partida&quot; y &quot;partidas
-          diferentes&quot; requieren partida activa.
-        </span>
-      </section>
-      </div>
 
       {/* Panel global por categorías: auto-fill + alineado arriba para que
           las tarjetas conserven su ancho y solo se "recorran" hacia arriba */}
@@ -1580,12 +1571,18 @@ export default function TrackerPanel({
             const optionRules = (c.challenge_rules ?? []).filter((r) =>
               ruleLabel(r)
             );
-            const ctrl = deriveMissionControls(c, optionRules);
+            const landKind = specialLandKind(c);
+            const displayOptionRules =
+              landKind === "high_point_win"
+                ? optionRules.filter((r) => r.action_type?.code === "land")
+                : optionRules;
+            const ctrl = deriveMissionControls(c, displayOptionRules);
             const showOptionChips =
               ctrl.isOptionBased &&
               !c.is_completed &&
               !locked &&
-              optionRules.length >= 2;
+              displayOptionRules.length >= 2;
+            const needsCannonArrival = optionRules.some(ruleNeedsNamedArrival);
             const addedThisMatch =
               !!activeMatch &&
               (c.challenge_rules ?? []).some((r) =>
@@ -1595,6 +1592,15 @@ export default function TrackerPanel({
                     p.match_id === activeMatch.id
                 )
               );
+
+            const singleRule =
+              (c.challenge_rules ?? []).length === 1
+                ? c.challenge_rules![0]
+                : null;
+            const singleLocLabel = singleRule?.location?.display_name ?? null;
+            const singleAction = singleRule?.action_type?.code;
+            const showLocHint =
+              !!singleLocLabel && !showOptionChips && !c.is_completed;
 
             return (
               <MissionRow
@@ -1606,8 +1612,69 @@ export default function TrackerPanel({
                 locked={locked}
                 accent={accent}
                 first={!weekMeta && i === 0}
+                visual={getMissionVisual(c)}
               >
+                {showLocHint && !landKind && (
+                  <p
+                    style={{
+                      margin: "0 0 8px",
+                      fontSize: fs(12, 17),
+                      color: "#9fc9f5",
+                    }}
+                  >
+                    {singleAction === "dance"
+                      ? "Bailar en: "
+                      : singleAction === "visit"
+                        ? "Visitar: "
+                        : "Lugar: "}
+                    <strong style={{ color: "#cfe6ff" }}>
+                      {singleLocLabel}
+                    </strong>
+                  </p>
+                )}
                 {showOptionChips && (
+                  <div style={{ display: "grid", gap: 8 }}>
+                    {needsCannonArrival && (
+                      <label
+                        style={{
+                          display: "flex",
+                          alignItems: "center",
+                          gap: 8,
+                          fontSize: fs(12, 17),
+                          color: "#9fc9f5",
+                          flexWrap: "wrap",
+                        }}
+                      >
+                        Llegada (ubicación con nombre):
+                        <select
+                          value={cannonArrivalByChallenge[c.id] ?? ""}
+                          disabled={addBlocked}
+                          onChange={(e) =>
+                            setCannonArrivalByChallenge((prev) => ({
+                              ...prev,
+                              [c.id]: e.target.value,
+                            }))
+                          }
+                          style={{
+                            padding: `${fs(6, 10)} ${fs(8, 12)}`,
+                            borderRadius: 8,
+                            border: "1px solid #2c4a7c",
+                            background: "#10254a",
+                            color: "white",
+                            fontSize: fs(12, 17),
+                            minWidth: fs(160, 240),
+                            opacity: addBlocked ? 0.5 : 1,
+                          }}
+                        >
+                          <option value="">— Elegir POI —</option>
+                          {namedLocations.map((l) => (
+                            <option key={l.id} value={l.id}>
+                              {l.label}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                    )}
                   <div
                     style={{
                       display: "grid",
@@ -1616,11 +1683,16 @@ export default function TrackerPanel({
                       gap: 6,
                     }}
                   >
-                    {optionRules.map((r) => {
+                    {displayOptionRules.map((r) => {
                       const done = isRuleDone(c, r.id);
-                      // los hechos se pueden volver a apretar para deshacer
+                      const needsArrival = ruleNeedsNamedArrival(r);
+                      const arrivalOk =
+                        !needsArrival ||
+                        (!!cannonArrivalByChallenge[c.id] &&
+                          namedLocIds.has(cannonArrivalByChallenge[c.id]));
                       const chipDisabled =
-                        busyRule === r.id || (!done && matchBlocked);
+                        busyRule === r.id ||
+                        (!done && (matchBlocked || !arrivalOk));
                       return (
                         <button
                           key={r.id}
@@ -1660,8 +1732,30 @@ export default function TrackerPanel({
                       );
                     })}
                   </div>
+                  </div>
                 )}
-                {c.kind === "simple" ? (
+                {landKind === "named_after_vents" ? (
+                  hasProgress && (
+                    <button
+                      disabled={locked}
+                      onClick={() => resetProgress(c)}
+                      style={{
+                        padding: `${fs(8, 12)} ${fs(12, 20)}`,
+                        borderRadius: 8,
+                        border: "none",
+                        background:
+                          "linear-gradient(180deg, #e1493a 0%, #b3271a 100%)",
+                        color: "white",
+                        cursor: locked ? "not-allowed" : "pointer",
+                        opacity: locked ? 0.5 : 1,
+                        fontSize: fs(13, 19),
+                        fontWeight: 700,
+                      }}
+                    >
+                      {c.is_completed ? "Descompletar" : "Quitar progreso"}
+                    </button>
+                  )
+                ) : c.kind === "simple" ? (
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
                     {/* descompletar siempre se permite; completar exige partida */}
                     <button

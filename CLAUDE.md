@@ -49,8 +49,21 @@ Proyecto **`ucjuxngjmcdwggishima`**. Verificado **2026-06-18** vía Management A
 | Migración | Estado |
 |-----------|--------|
 | `db/01`–`db/20` | **Aplicadas** (última: `20_prestige_w1_text.sql`) |
+| `db/21_twitch_betting.sql` | **Aplicada** (sistema de apuestas) |
+| `db/22_prestige_w3_w5.sql` | **Aplicada** (prestigios S3–S5, superseded por db/25) |
+| `db/24_cannon_named_arrival.sql` | **NO aplicada** (cañón/arrived_named_location; quedó obsoleta tras db/25) |
+| `db/25_prestige_rewrite.sql` | **Aplicada 2026-06-19** (reescritura total de prestigios S1–S10) |
+| `db/26_admin_bulk_ops.sql` | **Aplicada 2026-06-19** (RPCs admin: completar/reiniciar normales, prestigios, partidas) |
+| `db/27_prestige_fixes.sql` | **Aplicada 2026-06-19** (S4 daño mira/silenciada por tag; S9 tomate Retail; engine OR+value; bloque S10 falló por ilike `ca%on`≠`cañón`) |
+| `db/28_s10_cannon_fix.sql` | **Aplicada 2026-06-19** (S10 cañón: 7 reglas por campamento; sin POI de salida) |
+| `db/29_treasure_missions.sql` | **Aplicada 2026-06-19** (lupa/cuchillo→visita; prestigios aterrizaje+75; tesoros W8/W10 bailar; ubicaciones mapa) |
+| `db/30_meta_prestige_text.sql` | **Aplicada 2026-06-19** (meta semanal: desbloquear prestigios) |
+| `db/31_bridges_chest_prestige.sql` | **Aplicada 2026-06-19** (puentes W8; prestigios cofres Bloque/Hotel y Aeródromo Ártico) |
+| `db/32_land_mission_rules.sql` | **Aplicada 2026-06-19** (S6: 5 elevaciones OR + ganar; S9: land POI con nombre tras 3 respiraderos; `report_event` valida POI) |
 
-Marcadores de db/19 confirmados en remoto: columna `challenge_rules.rule_group`, objeto `chug_jug` + efecto use→gain, condiciones supervisor (`within_10s_landing`, `win_match`, `no_damage_between`, `no_named_chests`), prestigio cardinales opuestos, **70** desafíos de prestigio en Season 8 (7×10 semanas). **db/20:** prestigio W1 — texto formal explosiva+escopeta; P1 sustituido por asalto+francotirador misma partida (2 reglas kill). Temporadas: `season_8` activa; `season_9`/`season_10` con `is_locked=true` (sin datos de desafíos).
+Marcadores de db/19 confirmados en remoto: columna `challenge_rules.rule_group`, objeto `chug_jug` + efecto use→gain, condiciones supervisor (`within_10s_landing`, `win_match`, `no_damage_between`, `no_named_chests`), prestigio cardinales opuestos. **db/20:** prestigio W1 — texto formal explosiva+escopeta; P1 sustituido por asalto+francotirador misma partida (2 reglas kill). Temporadas: `season_8` activa; `season_9`/`season_10` con `is_locked=true` (sin datos de desafíos).
+
+**db/25 (reescritura de prestigios):** BORRA todos los prestigios de Season 8 y los RECREA según la lista oficial del usuario (idempotente; re-ejecutar deja el mismo estado). **69 prestigios** (S1–S2,S4–S10 = 7; **S3 = 6**; S7 unifica el desafío duplicado de "zonas vikingas" en uno solo cuyo alcance incluye villa vikinga sin nombre + Costas Clasistas). Los prestigios son **independientes por semana** — no están ligados a ningún normal salvo el desbloqueo semanal (db/16 intacto). Helpers `pg_temp` (`mk`/`rl`/`cn`/`act`/`tg`/`ob`/`lc`/`wk`); aplicar con `python scripts/apply_db25.py` (Management API requiere **User-Agent de navegador**, si no Cloudflare devuelve 403 error 1010). Catálogo nuevo: objetos `impulse_grenade`/`shadow_bomb`/`pirate_flag`; locations `sunny_steps_pyramid`,`grain_silo`,`submarine`,`snowy_mine`,`frozen_toilet`,`lava_square`,`viking_village`,`giant_phone_durr`,`giant_phone_pizza`,`volcano_affected`,`tomato_head_durr`,`tomato_head_town`,`throne`,`watchtower`. Condiciones supervisor nuevas: `shot_down_supply`,`from_battle_bus`,`within_30s_landing`,`scoped_or_suppressed`,`land_high_point`,`only_vending_weapons`,`fall_damage`,`before_first_circle`,`named_landing_after_3_vents`,`target_revived`,`from_named_location`,`fifteen_bounces_in_animal`. Valores con OR multi-arma se modelan con condición de un solo rule (el engine solo suma `value` con 1 regla); los OR por ubicación en `same_match` usan `rule_group` distinto por regla.
 
 Direct DB access for development: the service role key works against the REST API (`https://<project>.supabase.co/rest/v1/...`, bypasses RLS), and the access token allows arbitrary SQL including DDL via the Management API: `POST https://api.supabase.com/v1/projects/ucjuxngjmcdwggishima/database/query` with body `{"query": "..."}`. Schema changes (tables, RPCs, RLS policies) can therefore be made directly from here.
 
@@ -61,7 +74,7 @@ Two systems coexist:
 1. **Supabase Auth (current)** — `app/login/page.tsx` maps a username to a fake email (`<username>@checklist.local`) and calls `signInWithPassword`/`signUp`. `/tracker` and `/admin` gate access with `supabase.auth.getUser()` and redirect to `/login`; the checklist at `/` is **public** (read-only, anon RLS policies + table GRANTs from `db/04`, Realtime updates work for anonymous visitors).
 2. **Legacy custom auth** — `app/api/login/route.ts` (bcrypt against a `users` table, sets a `session_user` cookie, uses the service-role key) and `app/api/logout/route.ts`. Predates Supabase Auth; nothing reads the `session_user` cookie.
 
-Admin access (`app/admin/`) additionally requires a row in the `admin_users` table for the logged-in user. Admins can register new supervisor accounts from the admin panel via `app/api/admin/create-user/route.ts` — a server route that re-checks `admin_users` and calls `auth.admin` with the service-role key (never exposed to the browser). Admins also get an extra **"Reiniciar todo"** (reboot) button in the tracker (`isAdmin`-gated, with a confirm step) that calls the `reset_all_progress()` RPC — see the Auth/data-model notes below.
+Admin access (`app/admin/`) additionally requires a row in the `admin_users` table for the logged-in user. Admins can register new supervisor accounts from the admin panel via `app/api/admin/create-user/route.ts` — a server route that re-checks `admin_users` and calls `auth.admin` with the service-role key (never exposed to the browser). Admins also get an **"Acciones admin"** dropdown in the tracker (`AdminBulkMenu.tsx`, `isAdmin`-gated): reiniciar todo, completar/reiniciar normales o prestigios, reiniciar partidas — cada opción abre un modal de confirmación con fondo difuminado; RPCs en `db/12`/`db/26`.
 
 ### Supervisor tracking system
 
@@ -81,7 +94,7 @@ The tracker is a **global panel**: it loads the whole season and builds per-acti
 
 - Run SQL via the Management API: write the statement(s) to a file, JSON-encode with python (`json.dump({'query': sql}, ...)`), then `curl -X POST https://api.supabase.com/v1/projects/ucjuxngjmcdwggishima/database/query --data @file`. Only the LAST statement's result is returned — collect multi-step test output into a temp table and select it at the end. Use project-relative paths for files Python reads (`/tmp` is git-bash-only, invisible to native Windows Python).
 - To test `report_event`/`start_match` from SQL (they require `auth.uid()`), prepend: `select set_config('request.jwt.claims', '{"sub":"<user-uuid>","role":"authenticated"}', false);` in the same request.
-- Full progress reset: `delete from challenge_distinct_progress; delete from match_rule_progress; delete from matches; update challenges set current_value = 0, is_completed = false where is_meta = false;` (the meta trigger recomputes the weekly meta rows automatically). The same reset is exposed in-app as the `reset_all_progress()` RPC (`db/12`, `security definer`, admin-only) behind the tracker's "Reiniciar todo" button; it also clears `completed_in_match` so locked phases unlock.
+- Full progress reset: `delete from challenge_distinct_progress; delete from match_rule_progress; delete from matches; update challenges set current_value = 0, is_completed = false where is_meta = false;` (the meta trigger recomputes the weekly meta rows automatically). Exposed in-app vía `AdminBulkMenu` → `reset_all_progress()` (`db/12`/`db/26`); también `complete_normals`, `complete_prestiges`, `reset_normals`, `reset_prestiges`, `reset_matches`.
 - Adding a future season: insert into `seasons`, its `challenge_weeks`, one `is_meta` challenge per week (see `db/03_distinct_meta.sql` §7), then the challenges/rules following the `db/02_season8.sql` pg_temp-helper pattern. The UI picks up new seasons/weeks automatically.
 - Icon substitutions to be aware of: `volcano_vent` uses the "Air Vent" device icon; `vehicle` uses the Quadcrasher icon, `the_baller` the proper Baller vehicle PNG, and `treasure_map_knife`/`treasure_map_magnify` share the generic "Loading Screen" icon. To replace an icon: resolve the file with the MediaWiki API (`fortnite.fandom.com/api.php?action=query&titles=File:<name>&prop=imageinfo&iiprop=url`, browser User-Agent required; direct `Special:FilePath` returns 403) and save to `public/icons/<code>.png`.
 - On Windows, killing `npm run dev` can orphan the Node child holding port 3000; find it with `netstat -ano | grep :3000` and `taskkill //PID <pid> //F`.
@@ -116,7 +129,7 @@ Season/week navigation: both `/` and `/tracker` take `?season=<code>&week=<n>` (
 
 **Responsive / fluid sizing:** `fs(min, max)` in `theme.ts` returns a `clamp()` string that scales linearly with viewport width (min at ~380px phone → max at ~3000px/4K), so text/spacing don't look tiny on 4K nor overflow on phones. Use it for `fontSize`/`padding`/dimensions instead of fixed px on prominent surfaces. `contentWrap` is `width: min(1640px, 94vw)` with fluid padding. The font helpers (`navTab`/`pillTab`/`yellowButton`/`blueButton`), banner, mission rows, nav, season tabs and page headers already use `fs()`.
 
-**Tracker — controles por tipo (`deriveMissionControls` in `TrackerPanel.tsx`):** simple → solo Completar; multi-opción / `distinct_location` → chips + reset; `different_matches` → +1 por partida; `unit='value'` → slider + cantidad + Aumentar (sin −1); conteo discreto → +1, −1/slider solo si `target ≤ 20`. Panel global: input Cantidad solo si `cat.hasValue`. Prestigio bloqueado en tracker: texto del desafío + candado (sin mensaje de “completa la semana”).
+**Tracker — controles por tipo (`deriveMissionControls` in `TrackerPanel.tsx`):** simple → solo Completar; multi-opción / `distinct_location` → chips + reset; `different_matches` → +1 por partida; `unit='value'` → slider + cantidad + Aumentar (sin −1); conteo discreto → +1, −1/slider solo si `target ≤ 20`. Panel global: input Cantidad solo si `cat.hasValue`. Prestigio bloqueado en tracker: texto del desafío + candado (sin mensaje de “completa la semana”). **Barra superior (`TopNav` sticky en `/tracker`):** nav + partida en una sola caja; Iniciar / Ganar / Terminar; Ganar dispara `report_event(misc, win_match)` y cierra partida. **Aterrizajes especiales en panel global:** S6 elevaciones altas → categoría **Aterrizar** (5 POIs + condición autobús; victoria con Ganar); S9 POI tras respiraderos → **Aterrizar** (POI con nombre + condición `named_landing_after_3_vents`; respiraderos en **Usar**); reglas `win_match` sueltas no van al panel Misc.
 
 **Redacción de desafíos (español):** usar nombres oficiales de tags/objetos (`display_name`). Formato preferido para doble arma misma partida: *“Consigue una eliminación con un/a [tipo] y un/a [tipo] en la misma partida”* (con artículos; p. ej. “un arma explosiva y una escopeta”, no “explosivo y escopeta”).
 
@@ -126,3 +139,17 @@ Season/week navigation: both `/` and `/tracker` take `?season=<code>&week=<n>` (
 - **Auth legacy** (`app/api/login/route.ts`, cookie `session_user`) convive con Supabase Auth; nada lee esa cookie.
 - **Temporadas 9/10:** filas en `seasons` bloqueadas; falta seed de semanas/desafíos si se quieren activar.
 - **Admin panel:** mutaciones directas a tablas + `location.reload()` (sin optimistic UI).
+
+### Apuestas Twitch (`/admin/betting`, `/apuestas`)
+
+Predictions de Channel Points: viewers apuestan qué **semana** se completa primero (opciones ligadas a `challenge_weeks`). Directo de **un día** — una ventana al inicio (30 s–30 min, default 10 min).
+
+**Flujo:** streamer OAuth una vez (`/admin/betting` → Conectar Twitch) · supervisor guarda config + **Abrir apuesta** al inicio · ventana de apuestas en Twitch · al cumplir condición ganadora (`normales` o `normales_prestigio`) el trigger marca `pending_resolve` y la app **resuelve sola** en Twitch + sorteo ponderado por puntos apostados (premio extra del stream; CP los reparte Twitch).
+
+**Migración:** `db/21_twitch_betting.sql` — tablas `betting_pools`, `betting_pool_outcomes`, `betting_prediction_bets`, `betting_raffle_entries`, `twitch_tokens`; `challenge_weeks.fully_completed_at` / `fully_completed_prestige_at`; funciones `week_is_complete`, `week_completion_pct`, trigger `trg_mark_week_fully_complete`. Aplicar: `python scripts/apply_db21.py`.
+
+**Env vars (Vercel + `.env.local`):** `TWITCH_CLIENT_ID`, `TWITCH_CLIENT_SECRET`, `TWITCH_OAUTH_REDIRECT_URI` (default `{NEXT_PUBLIC_APP_URL}/api/twitch/oauth/callback`), `TWITCH_EVENTSUB_SECRET` (webhook EventSub), opcional `BETTING_INTERNAL_SECRET` (proteger `/api/internal/betting/auto-resolve`).
+
+**Rutas API:** `app/api/twitch/oauth/*`, `app/api/admin/betting/*`, `app/api/twitch/eventsub` (`channel.prediction.progress` acumula apuestas), `app/api/internal/betting/auto-resolve`. Lógica compartida en `app/lib/twitch/` (`helix.ts`, `resolve-pool.ts`, `raffle.ts`).
+
+**EventSub (prod):** registrar suscripciones `channel.prediction.progress` y `channel.prediction.lock` apuntando a `https://TU-DOMINIO/api/twitch/eventsub` (requiere URL pública; en local usar túnel).

@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import MissionRow from "./MissionRow";
+import { getMissionVisual } from "../lib/missionAssets";
 import SearchBox from "./SearchBox";
 import WeekTabs from "./WeekTabs";
 import BattlePassBanner from "./BattlePassBanner";
@@ -262,6 +263,7 @@ export default function ChallengeChecklist({
                   lockedLabel="Completa la misión normal para desbloquear el prestigio"
                   accent={accent}
                   first={i === 0}
+                  visual={getMissionVisual(c)}
                 />
               ))}
 

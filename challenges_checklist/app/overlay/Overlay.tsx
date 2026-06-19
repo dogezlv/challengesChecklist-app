@@ -66,7 +66,7 @@ const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
       id: "demo-meta",
       key: "demo-meta",
       type: "meta",
-      quest: "Completa todos los desafíos de la semana",
+      quest: "Completa todos los desafíos de la semana para desbloquear los prestigios",
       week: "Semana 3",
       from: 6,
       to: 7,
