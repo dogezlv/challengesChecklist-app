@@ -24,8 +24,23 @@ export function twitchClientSecret(): string {
 export function twitchRedirectUri(): string {
   return (
     process.env.TWITCH_OAUTH_REDIRECT_URI ??
-    `${process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000"}/api/twitch/oauth/callback`
+    `${appBaseUrl()}/api/twitch/oauth/callback`
   );
+}
+
+export function appBaseUrl(): string {
+  const url = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
+  return url.replace(/\/$/, "");
+}
+
+export function eventsubCallbackUrl(): string {
+  return `${appBaseUrl()}/api/twitch/eventsub`;
+}
+
+export function eventsubSecret(): string {
+  const secret = process.env.TWITCH_EVENTSUB_SECRET;
+  if (!secret) throw new Error("TWITCH_EVENTSUB_SECRET not configured");
+  return secret;
 }
 
 export function twitchOAuthScopes(): string[] {
@@ -190,6 +205,148 @@ export async function getPrediction(
   return data.data[0] ?? null;
 }
 
+let appTokenCache: { token: string; expires: number } | null = null;
+
+export async function getAppAccessToken(): Promise<string> {
+  if (appTokenCache && appTokenCache.expires > Date.now() + 60_000) {
+    return appTokenCache.token;
+  }
+  const res = await fetch("https://id.twitch.tv/oauth2/token", {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: new URLSearchParams({
+      client_id: twitchClientId(),
+      client_secret: twitchClientSecret(),
+      grant_type: "client_credentials",
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(`Twitch app token failed: ${await res.text()}`);
+  }
+  const data = (await res.json()) as { access_token: string; expires_in: number };
+  appTokenCache = {
+    token: data.access_token,
+    expires: Date.now() + data.expires_in * 1000,
+  };
+  return data.access_token;
+}
+
+export type EventSubSubscription = {
+  id: string;
+  type: string;
+  status: string;
+  condition: { broadcaster_user_id?: string };
+  transport?: { method: string; callback?: string };
+};
+
+export async function listEventSubSubscriptions(
+  appToken?: string
+): Promise<EventSubSubscription[]> {
+  const token = appToken ?? (await getAppAccessToken());
+  const data = await helixFetch<{ data: EventSubSubscription[] }>(
+    "/eventsub/subscriptions?first=100",
+    { method: "GET", accessToken: token }
+  );
+  return data.data ?? [];
+}
+
+async function createEventSubSubscription(
+  appToken: string,
+  type: "channel.prediction.progress" | "channel.prediction.lock",
+  broadcasterId: string
+): Promise<EventSubSubscription> {
+  const body = {
+    type,
+    version: "1",
+    condition: { broadcaster_user_id: broadcasterId },
+    transport: {
+      method: "webhook",
+      callback: eventsubCallbackUrl(),
+      secret: eventsubSecret(),
+    },
+  };
+  const data = await helixFetch<{ data: EventSubSubscription[] }>(
+    "/eventsub/subscriptions",
+    {
+      method: "POST",
+      accessToken: appToken,
+      body: JSON.stringify(body),
+    }
+  );
+  return data.data[0];
+}
+
+export type EnsureEventSubResult = {
+  callback: string;
+  created: string[];
+  existing: string[];
+  missingSecret?: boolean;
+};
+
+const PREDICTION_EVENT_TYPES = [
+  "channel.prediction.progress",
+  "channel.prediction.lock",
+] as const;
+
+export async function ensurePredictionEventSub(
+  broadcasterId: string
+): Promise<EnsureEventSubResult> {
+  const callback = eventsubCallbackUrl();
+  if (!process.env.TWITCH_EVENTSUB_SECRET) {
+    return { callback, created: [], existing: [], missingSecret: true };
+  }
+
+  const appToken = await getAppAccessToken();
+  const subs = await listEventSubSubscriptions(appToken);
+  const created: string[] = [];
+  const existing: string[] = [];
+
+  for (const type of PREDICTION_EVENT_TYPES) {
+    const found = subs.some(
+      (s) =>
+        s.type === type &&
+        s.status === "enabled" &&
+        s.condition?.broadcaster_user_id === broadcasterId &&
+        s.transport?.callback === callback
+    );
+    if (found) {
+      existing.push(type);
+      continue;
+    }
+    await createEventSubSubscription(appToken, type, broadcasterId);
+    created.push(type);
+  }
+
+  return { callback, created, existing };
+}
+
+export async function getPredictionEventSubStatus(broadcasterId: string): Promise<{
+  callback: string;
+  configured: boolean;
+  progress: boolean;
+  lock: boolean;
+}> {
+  const callback = eventsubCallbackUrl();
+  if (!process.env.TWITCH_EVENTSUB_SECRET) {
+    return { callback, configured: false, progress: false, lock: false };
+  }
+  const subs = await listEventSubSubscriptions();
+  const match = (type: string) =>
+    subs.some(
+      (s) =>
+        s.type === type &&
+        s.status === "enabled" &&
+        s.condition?.broadcaster_user_id === broadcasterId &&
+        s.transport?.callback === callback
+    );
+  return {
+    callback,
+    configured: true,
+    progress: match("channel.prediction.progress"),
+    lock: match("channel.prediction.lock"),
+  };
+}
+
 export function verifyEventSubSignature(
   messageId: string,
   timestamp: string,
@@ -198,7 +355,6 @@ export function verifyEventSubSignature(
 ): boolean {
   const secret = process.env.TWITCH_EVENTSUB_SECRET;
   if (!secret) return false;
-  const message = messageId + timestamp + body;
   const expected =
     "sha256=" +
     createHmac("sha256", secret).update(messageId + timestamp + body).digest("hex");
