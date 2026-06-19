@@ -8,8 +8,8 @@ import Overlay from "./Overlay";
 //   duration=<ms>   tiempo visible de la notificación (por defecto 4500)
 //   test=1          demo con textos reales (solo pruebas privadas)
 //   test=2          demo con textos genéricos, apto para mostrar en público
-//   challenge=<uuid> con test=2: en vivo, solo al completar ESE desafío (textos
-//                   genéricos, sin demo al cargar). Combina con season= si quieres.
+//   challenge=<uuid> con test=2: en vivo; al completar ESE desafío encola
+//                   los 5 estilos públicos (como test=2 sin params).
 export default async function OverlayPage({
   searchParams,
 }: {

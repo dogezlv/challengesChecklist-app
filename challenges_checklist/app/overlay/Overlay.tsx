@@ -162,58 +162,13 @@ const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
   ],
 };
 
-// Plantillas públicas (mismo copy que test=2) para stream sin spoilers.
-function publicNotice(
-  rowId: string,
-  from: number,
-  to: number,
-  target: number,
-  isPrestige: boolean,
-  isMeta: boolean
-): Notice {
-  const key = `${rowId}-${Date.now()}`;
-  const week = PUBLIC_WEEK_PLACEHOLDER;
-  if (isMeta) {
-    return {
-      id: rowId,
-      key,
-      type: "meta",
-      quest: "Vista previa — acento dorado",
-      eyebrow: "¡Completado!",
-      week,
-      from,
-      to,
-      target,
-      prestige: false,
-    };
+// Encola la secuencia completa de estilos públicos (igual que test=2 solo).
+function enqueuePublicStyleShowcase() {
+  const stamp = Date.now();
+  for (let i = 0; i < DEMO_NOTICES[2].length; i++) {
+    const demo = DEMO_NOTICES[2][i];
+    enqueue({ ...demo, key: `${demo.key}-${stamp}-${i}` });
   }
-  if (isPrestige) {
-    return {
-      id: rowId,
-      key,
-      type: "completed",
-      quest: "Vista previa — efecto iridiscente finalizado",
-      eyebrow: "¡Estilo premium listo!",
-      week,
-      from,
-      to,
-      target,
-      prestige: true,
-      prestigeTag: "Premium",
-    };
-  }
-  return {
-    id: rowId,
-    key,
-    type: "completed",
-    quest: "Vista previa — notificación en verde",
-    eyebrow: "¡Completado!",
-    week,
-    from,
-    to,
-    target,
-    prestige: false,
-  };
 }
 
 export default function Overlay({
@@ -318,18 +273,7 @@ export default function Overlay({
     const weekLabel = weekNum != null ? `Semana ${weekNum}` : null;
 
     if (publicLive) {
-      if (done && !prev.completed) {
-        enqueue(
-          publicNotice(
-            row.id,
-            prev.value,
-            target,
-            target,
-            !!row.is_prestige,
-            !!row.is_meta
-          )
-        );
-      }
+      if (done && !prev.completed) enqueuePublicStyleShowcase();
       return;
     }
 
