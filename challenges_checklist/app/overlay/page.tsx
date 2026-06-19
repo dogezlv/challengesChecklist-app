@@ -8,6 +8,8 @@ import Overlay from "./Overlay";
 //   duration=<ms>   tiempo visible de la notificación (por defecto 4500)
 //   test=1          demo con textos reales (solo pruebas privadas)
 //   test=2          demo con textos genéricos, apto para mostrar en público
+//   challenge=<uuid> con test=2: en vivo, solo al completar ESE desafío (textos
+//                   genéricos, sin demo al cargar). Combina con season= si quieres.
 export default async function OverlayPage({
   searchParams,
 }: {
@@ -22,8 +24,14 @@ export default async function OverlayPage({
   const testRaw = str("test");
   const testMode =
     testRaw === "1" ? 1 : testRaw === "2" ? 2 : 0;
+  const watchChallengeId = str("challenge") ?? null;
 
   return (
-    <Overlay seasonCode={seasonCode} durationMs={durationMs} testMode={testMode} />
+    <Overlay
+      seasonCode={seasonCode}
+      durationMs={durationMs}
+      testMode={testMode}
+      watchChallengeId={watchChallengeId}
+    />
   );
 }
