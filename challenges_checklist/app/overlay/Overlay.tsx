@@ -35,6 +35,9 @@ const ENTER_MS = 450; // entrada (deslizar)
 const FILL_MS = 850; // relleno de la barra + conteo del número
 const EXIT_MS = 450; // salida (deslizar)
 
+// test=2 / overlay público: sin número de semana real (evita spoilers).
+const PUBLIC_WEEK_PLACEHOLDER = "···";
+
 const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
   1: [
     {
@@ -100,7 +103,7 @@ const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
       type: "progress",
       quest: "Vista previa — barra de progreso animada",
       eyebrow: "Progreso actualizado",
-      week: "Semana 1",
+      week: PUBLIC_WEEK_PLACEHOLDER,
       from: 12,
       to: 48,
       target: 100,
@@ -112,7 +115,7 @@ const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
       type: "completed",
       quest: "Vista previa — notificación en verde",
       eyebrow: "¡Completado!",
-      week: "Semana 1",
+      week: PUBLIC_WEEK_PLACEHOLDER,
       from: 4,
       to: 5,
       target: 5,
@@ -122,9 +125,9 @@ const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
       id: "demo-meta",
       key: "demo-meta",
       type: "meta",
-      quest: "Vista previa — acento dorado semanal",
-      eyebrow: "¡Semana completada!",
-      week: "Semana 1",
+      quest: "Vista previa — acento dorado",
+      eyebrow: "¡Completado!",
+      week: PUBLIC_WEEK_PLACEHOLDER,
       from: 9,
       to: 10,
       target: 10,
@@ -136,7 +139,7 @@ const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
       type: "progress",
       quest: "Vista previa — efecto iridiscente activo",
       eyebrow: "Estilo premium",
-      week: "Semana 2",
+      week: PUBLIC_WEEK_PLACEHOLDER,
       from: 1,
       to: 2,
       target: 4,
@@ -149,7 +152,7 @@ const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
       type: "completed",
       quest: "Vista previa — efecto iridiscente finalizado",
       eyebrow: "¡Estilo premium listo!",
-      week: "Semana 2",
+      week: PUBLIC_WEEK_PLACEHOLDER,
       from: 60,
       to: 120,
       target: 120,
@@ -162,22 +165,21 @@ const DEMO_NOTICES: Record<1 | 2, Notice[]> = {
 // Plantillas públicas (mismo copy que test=2) para stream sin spoilers.
 function publicNotice(
   rowId: string,
-  type: Notice["type"],
   from: number,
   to: number,
   target: number,
-  week: string | null,
   isPrestige: boolean,
   isMeta: boolean
 ): Notice {
   const key = `${rowId}-${Date.now()}`;
+  const week = PUBLIC_WEEK_PLACEHOLDER;
   if (isMeta) {
     return {
       id: rowId,
       key,
       type: "meta",
-      quest: "Vista previa — acento dorado semanal",
-      eyebrow: "¡Semana completada!",
+      quest: "Vista previa — acento dorado",
+      eyebrow: "¡Completado!",
       week,
       from,
       to,
@@ -320,11 +322,9 @@ export default function Overlay({
         enqueue(
           publicNotice(
             row.id,
-            row.is_meta ? "meta" : "completed",
             prev.value,
             target,
             target,
-            weekLabel,
             !!row.is_prestige,
             !!row.is_meta
           )
