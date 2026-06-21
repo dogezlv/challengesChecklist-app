@@ -1,12 +1,18 @@
 import type { Challenge } from "@/app/lib/types";
 
-export type MissionVisual = {
-  kind: "loading_screen" | "treasure_map";
-  src: string;
-  title: string;
-  /** Etiqueta corta del botón junto a la misión */
-  buttonLabel: string;
-};
+export type MissionVisual =
+  | {
+      kind: "loading_screen";
+      src: string;
+      title: string;
+      buttonLabel: string;
+    }
+  | {
+      kind: "treasure_map";
+      src: string;
+      title: string;
+      buttonLabel: string;
+    };
 
 const LOADING_SCREEN_ICON = "/icons/treasure_map_magnify.png";
 const TREASURE_MAP_ICON = "/icons/treasure_signpost.png";
@@ -70,5 +76,7 @@ export function getMissionVisual(c: Challenge): MissionVisual | null {
 }
 
 export function visualButtonIcon(visual: MissionVisual): string {
-  return visual.kind === "loading_screen" ? LOADING_SCREEN_ICON : TREASURE_MAP_ICON;
+  return visual.kind === "loading_screen"
+    ? LOADING_SCREEN_ICON
+    : TREASURE_MAP_ICON;
 }

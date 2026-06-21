@@ -38,7 +38,7 @@ export default function MissionRow({
   const [viewer, setViewer] = useState<MissionVisual | null>(null);
   const percent = target > 0 ? Math.min((current / target) * 100, 100) : 0;
   const color = completed ? fnt.green : meta ? fnt.gold : accent;
-  const showVisual = !locked && visual;
+  const showVisual = !locked && visual && !completed;
 
   return (
     <>
