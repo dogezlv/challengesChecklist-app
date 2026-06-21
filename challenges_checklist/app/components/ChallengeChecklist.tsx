@@ -6,10 +6,11 @@ import { createClient } from "@/utils/supabase/client";
 import MissionRow from "./MissionRow";
 import { getMissionVisual } from "../lib/missionAssets";
 import SearchBox from "./SearchBox";
+import IncompleteOnlyToggle from "./IncompleteOnlyToggle";
+import PrestigeViewToggle from "./PrestigeViewToggle";
 import WeekTabs from "./WeekTabs";
 import BattlePassBanner from "./BattlePassBanner";
-import FortniteIcon from "./FortniteIcon";
-import { bodyFont, fnt, fs, panel, titleFont, weekAccent } from "../lib/theme";
+import { fnt, fs, panel, weekAccent } from "../lib/theme";
 import type { Season, Week } from "../lib/selection";
 import {
   normalizeText,
@@ -42,6 +43,7 @@ export default function ChallengeChecklist({
   const [weekTab, setWeekTab] = useState(initialWeekNumber);
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState("");
+  const [onlyIncomplete, setOnlyIncomplete] = useState(false);
   // modo prestigio: muestra los desafíos extra (más difíciles) con tema teal
   const [prestige, setPrestige] = useState(false);
 
@@ -137,6 +139,7 @@ export default function ChallengeChecklist({
     const phaseShow = currentPhaseIds(weekChalls);
     return sortWeekChallenges(weekChalls).filter(
       (c) =>
+        (!onlyIncomplete || !c.is_completed) &&
         (!c.line_id || phaseShow.has(c.id)) &&
         (!query || normalizeText(c.description).includes(query))
     );
@@ -159,6 +162,7 @@ export default function ChallengeChecklist({
   function weekMetaChallenge(week: Week) {
     const meta = challenges.find((c) => c.week_id === week.id && c.is_meta);
     if (!meta) return null;
+    if (onlyIncomplete && meta.is_completed) return null;
     if (query && !normalizeText(meta.description).includes(query)) return null;
     return meta;
   }
@@ -200,15 +204,34 @@ export default function ChallengeChecklist({
         }}
       />
 
-      <SearchBox
-        value={search}
-        onChange={setSearch}
-        placeholder={
-          showAll
-            ? "Buscar en todas las semanas…"
-            : `Buscar en la semana ${tabWeek?.week_number ?? ""}…`
-        }
-      />
+      <div
+        style={{
+          display: "flex",
+          flexWrap: "wrap",
+          gap: 10,
+          alignItems: "center",
+        }}
+      >
+        <div style={{ flex: "1 1 240px", maxWidth: 420 }}>
+          <SearchBox
+            value={search}
+            onChange={setSearch}
+            placeholder={
+              showAll
+                ? "Buscar en todas las semanas…"
+                : `Buscar en la semana ${tabWeek?.week_number ?? ""}…`
+            }
+          />
+        </div>
+        <PrestigeViewToggle
+          active={prestige}
+          onToggle={() => setPrestige((p) => !p)}
+        />
+        <IncompleteOnlyToggle
+          active={onlyIncomplete}
+          onChange={setOnlyIncomplete}
+        />
+      </div>
 
       {viewWeeks.map((week) => {
         const items = visibleWeekChallenges(week);
@@ -269,9 +292,11 @@ export default function ChallengeChecklist({
 
               {rows.length === 0 && (
                 <p style={{ color: fnt.textDim, margin: 0, padding: `${fs(8, 14)} 0` }}>
-                  {prestige
-                    ? "Esta semana aún no tiene desafíos de prestigio."
-                    : "No hay desafíos para mostrar."}
+                  {onlyIncomplete
+                    ? "No quedan desafíos pendientes en esta semana."
+                    : prestige
+                      ? "Esta semana aún no tiene desafíos de prestigio."
+                      : "No hay desafíos para mostrar."}
                 </p>
               )}
             </div>
@@ -279,69 +304,12 @@ export default function ChallengeChecklist({
         );
       })}
 
-      {/* Sección de prestigio (como en la Temporada X): tag + CTA */}
-      <div
-        style={{
-          display: "flex",
-          alignItems: "center",
-          justifyContent: prestige ? "flex-end" : "space-between",
-          gap: 16,
-          flexWrap: "wrap",
-          minHeight: fs(56, 84), // altura fija: no salta al alternar
-          borderRadius: 10,
-          padding: `${fs(11, 18)} ${fs(14, 24)}`,
-          border: "1px solid rgba(150,200,248,0.28)",
-          background: "rgba(6, 32, 74, 0.55)",
-        }}
-      >
-        {/* indicación (NO botón) — solo en modo normal */}
-        {!prestige && (
-          <span style={{ display: "grid", gap: 3 }}>
-            <span
-              style={{
-                display: "flex",
-                alignItems: "center",
-                gap: 8,
-                fontFamily: titleFont,
-                fontSize: fs(14, 23),
-                letterSpacing: 1.4,
-                textTransform: "uppercase",
-                color: fnt.yellow,
-              }}
-            >
-              <FortniteIcon code="battle_star" emoji="⭐" size={18} />
-              Misión de prestigio
-            </span>
-            <span style={{ fontFamily: bodyFont, fontSize: fs(11, 16), color: fnt.textDim }}>
-              Objetivos más difíciles y más recompensas
-            </span>
-          </span>
-        )}
-        <button
-          onClick={() => setPrestige((p) => !p)}
-          style={{
-            fontFamily: titleFont,
-            fontSize: fs(15, 25),
-            letterSpacing: 1,
-            textTransform: "uppercase",
-            whiteSpace: "nowrap",
-            cursor: "pointer",
-            padding: `${fs(9, 14)} ${fs(18, 30)}`,
-            borderRadius: 6,
-            border: "none",
-            color: "#ffffff",
-            background: "linear-gradient(180deg, #36a2ff 0%, #1f6fe0 100%)",
-            boxShadow: "0 3px 0 rgba(0,0,0,0.22)",
-          }}
-        >
-          {prestige ? "Volver a normal" : "Ver prestigio"}
-        </button>
-      </div>
-
-      {query &&
+      {(query || onlyIncomplete) &&
         viewWeeks.every((w) => visibleWeekChallenges(w).length === 0 && !weekMetaChallenge(w)) && (
           <p style={{ color: fnt.textDim, margin: 0 }}>
-            Ningún desafío coincide con &quot;{search}&quot;.
+            {query
+              ? `Ningún desafío coincide con "${search}".`
+              : "No quedan desafíos pendientes en la selección actual."}
           </p>
         )}
     </div>

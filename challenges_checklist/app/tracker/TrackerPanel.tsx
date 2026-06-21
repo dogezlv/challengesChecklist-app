@@ -11,6 +11,8 @@ import MissionRow from "../components/MissionRow";
 import BattlePassBanner from "../components/BattlePassBanner";
 import PageBackground from "../components/PageBackground";
 import SearchBox from "../components/SearchBox";
+import IncompleteOnlyToggle from "../components/IncompleteOnlyToggle";
+import PrestigeViewToggle from "../components/PrestigeViewToggle";
 import WeekTabs from "../components/WeekTabs";
 import TopNav from "../components/TopNav";
 import TrackerLogsPanel from "../components/TrackerLogsPanel";
@@ -390,6 +392,7 @@ export default function TrackerPanel({
   >({});
   const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState("");
+  const [onlyIncomplete, setOnlyIncomplete] = useState(false);
   // vista de prestigio en el panel por semana (no mezclar con los normales)
   const [prestigeView, setPrestigeView] = useState(false);
   const [trackerView, setTrackerView] = useState<"track" | "logs">("track");
@@ -1163,12 +1166,17 @@ export default function TrackerPanel({
       challenges.filter(
         (c) => c.week_id === week.id && !c.is_meta && !!c.is_prestige === prestigeView
       )
-    ).filter((c) => !query || normalizeText(c.description).includes(query));
+    ).filter(
+      (c) =>
+        (!onlyIncomplete || !c.is_completed) &&
+        (!query || normalizeText(c.description).includes(query))
+    );
   }
 
   function weekMetaOf(week: Week) {
     const meta = challenges.find((c) => c.week_id === week.id && c.is_meta);
     if (!meta) return null;
+    if (onlyIncomplete && meta.is_completed) return null;
     if (query && !normalizeText(meta.description).includes(query)) return null;
     return meta;
   }
@@ -1711,15 +1719,34 @@ export default function TrackerPanel({
           }}
         />
 
-        <SearchBox
-          value={search}
-          onChange={setSearch}
-          placeholder={
-            showAll
-              ? "Buscar en todas las semanas…"
-              : `Buscar en la semana ${tabWeek?.week_number ?? ""}…`
-          }
-        />
+        <div
+          style={{
+            display: "flex",
+            flexWrap: "wrap",
+            gap: 10,
+            alignItems: "center",
+          }}
+        >
+          <div style={{ flex: "1 1 240px", maxWidth: 420 }}>
+            <SearchBox
+              value={search}
+              onChange={setSearch}
+              placeholder={
+                showAll
+                  ? "Buscar en todas las semanas…"
+                  : `Buscar en la semana ${tabWeek?.week_number ?? ""}…`
+              }
+            />
+          </div>
+          <PrestigeViewToggle
+            active={prestigeView}
+            onToggle={() => setPrestigeView((p) => !p)}
+          />
+          <IncompleteOnlyToggle
+            active={onlyIncomplete}
+            onChange={setOnlyIncomplete}
+          />
+        </div>
 
         {viewWeeks.map((week) => {
           const items = weekItems(week);
@@ -2182,75 +2209,26 @@ export default function TrackerPanel({
               </MissionRow>
             );
           })}
+          {!weekMeta && items.length === 0 && (
+            <p style={{ color: fnt.textDim, margin: 0, padding: `${fs(8, 14)} 0` }}>
+              {onlyIncomplete
+                ? "No quedan desafíos pendientes en esta semana."
+                : "No hay desafíos para mostrar."}
+            </p>
+          )}
           </div>
         </div>
           );
         })}
 
-        {/* Botón para alternar la vista de prestigio (no mezclar con normales) */}
-        <div
-          style={{
-            display: "flex",
-            alignItems: "center",
-            justifyContent: prestigeView ? "flex-end" : "space-between",
-            gap: 16,
-            flexWrap: "wrap",
-            minHeight: fs(56, 84),
-            borderRadius: 10,
-            padding: `${fs(11, 18)} ${fs(14, 24)}`,
-            border: "1px solid rgba(150,200,248,0.28)",
-            background: "rgba(6, 32, 74, 0.55)",
-          }}
-        >
-          {!prestigeView && (
-            <span style={{ display: "grid", gap: 3 }}>
-              <span
-                style={{
-                  display: "flex",
-                  alignItems: "center",
-                  gap: 8,
-                  fontFamily: titleFont,
-                  fontSize: fs(14, 23),
-                  letterSpacing: 1.4,
-                  textTransform: "uppercase",
-                  color: fnt.yellow,
-                }}
-              >
-                <FortniteIcon code="battle_star" emoji="⭐" size={18} />
-                Misión de prestigio
-              </span>
-              <span style={{ fontSize: fs(11, 16), color: fnt.textDim }}>
-                Objetivos más difíciles (se desbloquean al completar la semana)
-              </span>
-            </span>
-          )}
-          <button
-            onClick={() => setPrestigeView((p) => !p)}
-            style={{
-              fontFamily: titleFont,
-              fontSize: fs(15, 25),
-              letterSpacing: 1,
-              textTransform: "uppercase",
-              whiteSpace: "nowrap",
-              cursor: "pointer",
-              padding: `${fs(9, 14)} ${fs(18, 30)}`,
-              borderRadius: 6,
-              border: "none",
-              color: "#ffffff",
-              background: "linear-gradient(180deg, #36a2ff 0%, #1f6fe0 100%)",
-              boxShadow: "0 3px 0 rgba(0,0,0,0.22)",
-            }}
-          >
-            {prestigeView ? "Ver normal" : "Ver prestigio"}
-          </button>
-        </div>
-
-        {query &&
+        {(query || onlyIncomplete) &&
           viewWeeks.every(
             (w) => weekItems(w).length === 0 && !weekMetaOf(w)
           ) && (
             <p style={{ color: "#9fc9f5", margin: 0 }}>
-              Ningún desafío coincide con &quot;{search}&quot;.
+              {query
+                ? `Ningún desafío coincide con "${search}".`
+                : "No quedan desafíos pendientes en la selección actual."}
             </p>
           )}
       </section>
