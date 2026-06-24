@@ -9,6 +9,20 @@ type OutcomeInput = {
   outcome_title: string;
 };
 
+async function loadPoolWithOutcomes(service: ReturnType<typeof createServiceClient>, poolId: string) {
+  const { data: pool, error } = await service
+    .from("betting_pools")
+    .select("*, betting_pool_outcomes(*)")
+    .eq("id", poolId)
+    .single();
+  if (error || !pool) {
+    throw new Error(error?.message ?? "No se pudo cargar el pool");
+  }
+  const raw = pool.betting_pool_outcomes;
+  pool.betting_pool_outcomes = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return pool;
+}
+
 export async function POST(req: Request) {
   const auth = await requireAdmin();
   if ("error" in auth && auth.error) return auth.error;
@@ -93,8 +107,13 @@ export async function POST(req: Request) {
   }
 
   const upsertOutcomes = async (targetPoolId: string) => {
-    await service.from("betting_pool_outcomes").delete().eq("pool_id", targetPoolId);
-    await service.from("betting_pool_outcomes").insert(
+    const { error: delErr } = await service
+      .from("betting_pool_outcomes")
+      .delete()
+      .eq("pool_id", targetPoolId);
+    if (delErr) throw new Error(delErr.message);
+
+    const { error: insErr } = await service.from("betting_pool_outcomes").insert(
       outcomeRows.map((o) => ({
         pool_id: targetPoolId,
         week_id: o.week_id,
@@ -102,8 +121,10 @@ export async function POST(req: Request) {
         outcome_title: o.outcome_title,
       }))
     );
+    if (insErr) throw new Error(insErr.message);
   };
 
+  try {
   if (poolId) {
     const { data: existing } = await service
       .from("betting_pools")
@@ -114,7 +135,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Solo pools en draft son editables" }, { status: 400 });
     }
 
-    await service
+    const { error: updErr } = await service
       .from("betting_pools")
       .update({
         season_id: seasonId,
@@ -125,15 +146,13 @@ export async function POST(req: Request) {
         updated_at: new Date().toISOString(),
       })
       .eq("id", poolId);
+    if (updErr) {
+      return NextResponse.json({ error: updErr.message }, { status: 500 });
+    }
 
     await upsertOutcomes(poolId);
 
-    const { data: pool } = await service
-      .from("betting_pools")
-      .select("*, betting_pool_outcomes(*)")
-      .eq("id", poolId)
-      .single();
-
+    const pool = await loadPoolWithOutcomes(service, poolId);
     return NextResponse.json({ pool });
   }
 
@@ -172,11 +191,10 @@ export async function POST(req: Request) {
 
   await upsertOutcomes(pool.id);
 
-  const { data: full } = await service
-    .from("betting_pools")
-    .select("*, betting_pool_outcomes(*)")
-    .eq("id", pool.id)
-    .single();
-
+  const full = await loadPoolWithOutcomes(service, pool.id);
   return NextResponse.json({ pool: full });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    return NextResponse.json({ error: msg }, { status: 500 });
+  }
 }
