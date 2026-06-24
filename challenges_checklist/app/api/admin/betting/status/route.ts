@@ -4,6 +4,7 @@ import { createServiceClient } from "@/app/lib/supabase-service";
 import {
   buildPoolBetSummary,
   getEligibleWeeks,
+  POOL_OUTCOMES_EMBED,
   type WinMode,
 } from "@/app/lib/twitch/betting-weeks";
 import {
@@ -53,7 +54,7 @@ export async function GET(req: Request) {
     .select(
       `
       *,
-      betting_pool_outcomes (
+      ${POOL_OUTCOMES_EMBED} (
         id, week_id, week_number, outcome_title, twitch_outcome_id
       )
     `

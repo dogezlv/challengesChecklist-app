@@ -1,7 +1,11 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/app/lib/admin-auth";
 import { createServiceClient } from "@/app/lib/supabase-service";
-import { getEligibleWeeks, type WinMode } from "@/app/lib/twitch/betting-weeks";
+import {
+  getEligibleWeeks,
+  POOL_OUTCOMES_EMBED,
+  type WinMode,
+} from "@/app/lib/twitch/betting-weeks";
 
 type OutcomeInput = {
   week_id?: string | null;
@@ -12,7 +16,7 @@ type OutcomeInput = {
 async function loadPoolWithOutcomes(service: ReturnType<typeof createServiceClient>, poolId: string) {
   const { data: pool, error } = await service
     .from("betting_pools")
-    .select("*, betting_pool_outcomes(*)")
+    .select(`*, ${POOL_OUTCOMES_EMBED}(*)`)
     .eq("id", poolId)
     .single();
   if (error || !pool) {

@@ -1,5 +1,8 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 
+/** PostgREST embed hint (db/43 añadió winning_outcome_id → ambigüedad sin esto). */
+export const POOL_OUTCOMES_EMBED = "betting_pool_outcomes!betting_pool_outcomes_pool_id_fkey";
+
 export type WinMode = "normales" | "normales_prestigio";
 
 export type WeekRow = { id: string; week_number: number };
