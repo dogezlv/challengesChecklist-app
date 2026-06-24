@@ -3,6 +3,19 @@ import { requireAdmin } from "@/app/lib/admin-auth";
 import { createServiceClient } from "@/app/lib/supabase-service";
 import { createPrediction, ensurePredictionEventSub, getValidTwitchTokens } from "@/app/lib/twitch/helix";
 
+type PoolOutcome = {
+  id: string;
+  week_number: number | null;
+  outcome_title: string;
+};
+
+function normalizeOutcomes(raw: unknown): PoolOutcome[] {
+  const list = Array.isArray(raw) ? raw : raw ? [raw] : [];
+  return list
+    .filter((o): o is PoolOutcome => !!o && typeof o === "object" && typeof (o as PoolOutcome).id === "string")
+    .sort((a, b) => (a.week_number ?? 0) - (b.week_number ?? 0));
+}
+
 export async function POST(req: Request) {
   const auth = await requireAdmin();
   if ("error" in auth && auth.error) return auth.error;
@@ -29,12 +42,13 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Pool debe estar en draft" }, { status: 400 });
   }
 
-  const outcomes = [...(pool.betting_pool_outcomes ?? [])].sort(
-    (a: { week_number: number }, b: { week_number: number }) => a.week_number - b.week_number
-  );
+  const outcomes = normalizeOutcomes(pool.betting_pool_outcomes);
 
   if (outcomes.length < 2) {
-    return NextResponse.json({ error: "Se necesitan al menos 2 semanas" }, { status: 400 });
+    return NextResponse.json(
+      { error: "Se necesitan al menos 2 opciones. Guarda el borrador de nuevo." },
+      { status: 400 }
+    );
   }
 
   try {
@@ -49,18 +63,19 @@ export async function POST(req: Request) {
     const prediction = await createPrediction(
       tokens,
       pool.title,
-      outcomes.map((o: { outcome_title: string }) => ({ title: o.outcome_title })),
+      outcomes.map((o) => ({ title: o.outcome_title })),
       pool.duration_seconds
     );
 
+    const helixOutcomes = prediction.outcomes ?? [];
     for (let i = 0; i < outcomes.length; i++) {
-      const helixOutcome = prediction.outcomes[i];
-      if (helixOutcome) {
-        await service
-          .from("betting_pool_outcomes")
-          .update({ twitch_outcome_id: helixOutcome.id })
-          .eq("id", outcomes[i].id);
-      }
+      const row = outcomes[i];
+      const helixOutcome = helixOutcomes[i];
+      if (!row?.id || !helixOutcome?.id) continue;
+      await service
+        .from("betting_pool_outcomes")
+        .update({ twitch_outcome_id: helixOutcome.id })
+        .eq("id", row.id);
     }
 
     await service

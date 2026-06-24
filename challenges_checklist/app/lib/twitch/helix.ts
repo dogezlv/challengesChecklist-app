@@ -197,7 +197,11 @@ export async function createPrediction(
     accessToken: tokens.access_token,
     body: JSON.stringify(body),
   });
-  return data.data[0];
+  const prediction = data.data?.[0];
+  if (!prediction?.id) {
+    throw new Error("Twitch no devolvió la predicción creada");
+  }
+  return prediction;
 }
 
 export async function resolvePrediction(

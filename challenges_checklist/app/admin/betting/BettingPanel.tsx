@@ -308,6 +308,9 @@ export default function BettingPanel({
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al guardar");
+      if (!data.pool?.id) {
+        throw new Error("No se pudo guardar el borrador");
+      }
       setPool(data.pool);
       setMessage("Configuración guardada.");
       await refresh();
@@ -331,34 +334,37 @@ export default function BettingPanel({
 
     setLoading(true);
     try {
-      let id = pool?.status === "draft" ? pool.id : undefined;
-      if (!id) {
-        const saveRes = await fetch("/api/admin/betting/pools", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            season_id: seasonId,
-            pool_kind: poolKind,
-            title: isCustom ? customTitle : title,
-            win_mode: winMode,
-            duration_seconds: durationSeconds,
-            outcomes: isCustom
-              ? customOutcomes.map((t, i) => ({
-                  week_id: null,
-                  week_number: i + 1,
-                  outcome_title: t,
-                }))
-              : weekOutcomes,
-          }),
-        });
-        const saveData = await saveRes.json();
-        if (!saveRes.ok) throw new Error(saveData.error);
-        id = saveData.pool.id;
+      const outcomes = isCustom
+        ? customOutcomes.map((t, i) => ({
+            week_id: null,
+            week_number: i + 1,
+            outcome_title: t,
+          }))
+        : weekOutcomes;
+
+      const saveRes = await fetch("/api/admin/betting/pools", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          pool_id: pool?.status === "draft" ? pool.id : undefined,
+          season_id: seasonId,
+          pool_kind: poolKind,
+          title: isCustom ? customTitle : title,
+          win_mode: winMode,
+          duration_seconds: durationSeconds,
+          outcomes,
+        }),
+      });
+      const saveData = await saveRes.json();
+      if (!saveRes.ok) throw new Error(saveData.error ?? "Error al guardar borrador");
+      if (!saveData.pool?.id) {
+        throw new Error("No se pudo crear el borrador de la apuesta");
       }
+
       const res = await fetch("/api/admin/betting/open", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ pool_id: id }),
+        body: JSON.stringify({ pool_id: saveData.pool.id }),
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error ?? "Error al abrir");
