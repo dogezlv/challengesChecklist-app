@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/app/lib/admin-auth";
 import { createServiceClient } from "@/app/lib/supabase-service";
+import { POOL_OUTCOMES_EMBED } from "@/app/lib/twitch/betting-weeks";
 import { createPrediction, ensurePredictionEventSub, getValidTwitchTokens } from "@/app/lib/twitch/helix";
 
 type PoolOutcome = {
@@ -34,7 +35,7 @@ export async function POST(req: Request) {
   const service = createServiceClient();
   const { data: pool } = await service
     .from("betting_pools")
-    .select("*, betting_pool_outcomes(*)")
+    .select(`*, ${POOL_OUTCOMES_EMBED}(*)`)
     .eq("id", poolId)
     .single();
 

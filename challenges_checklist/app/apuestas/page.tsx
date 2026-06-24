@@ -2,6 +2,7 @@ import Link from "next/link";
 import PageBackground from "@/app/components/PageBackground";
 import TopNav from "@/app/components/TopNav";
 import { createServiceClient } from "@/app/lib/supabase-service";
+import { POOL_OUTCOMES_EMBED } from "@/app/lib/twitch/betting-weeks";
 import { processPendingResolves } from "@/app/lib/twitch/resolve-pool";
 import {
   blueButton,
@@ -28,7 +29,7 @@ export default async function ApuestasPage() {
       `
       *,
       seasons ( code, display_name ),
-      betting_pool_outcomes ( week_id, week_number, outcome_title, twitch_outcome_id ),
+      ${POOL_OUTCOMES_EMBED} ( week_id, week_number, outcome_title, twitch_outcome_id ),
       betting_raffle_entries ( twitch_display_name, twitch_login, points_wagered )
     `
     )
