@@ -9,7 +9,8 @@ import { newRaffleSeed, weightedPick, type RaffleEntry } from "@/app/lib/twitch/
 
 export type ResolveResult = {
   poolId: string;
-  winningWeekId: string;
+  winningWeekId: string | null;
+  winningOutcomeId: string | null;
   raffleWinner: {
     twitch_user_id: string;
     login: string | null;
@@ -23,8 +24,10 @@ export type ResolveResult = {
 type PoolRow = {
   id: string;
   status: string;
+  pool_kind: string;
   twitch_prediction_id: string | null;
   winning_week_id: string | null;
+  winning_outcome_id: string | null;
   win_mode: string;
   raffle_seed: string | null;
   raffle_winner_twitch_user_id: string | null;
@@ -32,7 +35,7 @@ type PoolRow = {
 
 type OutcomeRow = {
   id: string;
-  week_id: string;
+  week_id: string | null;
   twitch_outcome_id: string | null;
 };
 
@@ -54,7 +57,10 @@ function mergePredictors(
   }
 }
 
-export async function resolveBettingPool(poolId: string): Promise<ResolveResult> {
+export async function resolveBettingPool(
+  poolId: string,
+  manualWinningOutcomeId?: string
+): Promise<ResolveResult> {
   const service = createServiceClient();
 
   const { data: pool, error: poolErr } = await service
@@ -69,7 +75,8 @@ export async function resolveBettingPool(poolId: string): Promise<ResolveResult>
   if (p.status === "resolved" && p.raffle_winner_twitch_user_id) {
     return {
       poolId,
-      winningWeekId: p.winning_week_id!,
+      winningWeekId: p.winning_week_id,
+      winningOutcomeId: p.winning_outcome_id,
       raffleWinner: {
         twitch_user_id: p.raffle_winner_twitch_user_id,
         login: (pool as { raffle_winner_login?: string }).raffle_winner_login ?? null,
@@ -81,19 +88,41 @@ export async function resolveBettingPool(poolId: string): Promise<ResolveResult>
     };
   }
 
-  if (!p.winning_week_id) throw new Error("Semana ganadora aún no definida");
-  if (!p.twitch_prediction_id) throw new Error("Prediction de Twitch no vinculada");
-
   const { data: outcomes } = await service
     .from("betting_pool_outcomes")
     .select("*")
     .eq("pool_id", poolId);
 
-  const winningOutcome = (outcomes as OutcomeRow[] | null)?.find(
-    (o) => o.week_id === p.winning_week_id
-  );
+  const outcomeList = (outcomes as OutcomeRow[] | null) ?? [];
+
+  if (p.pool_kind === "custom" && manualWinningOutcomeId) {
+    await service
+      .from("betting_pools")
+      .update({
+        winning_outcome_id: manualWinningOutcomeId,
+        winning_week_set_at: new Date().toISOString(),
+        status: "pending_resolve",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", poolId);
+    p.winning_outcome_id = manualWinningOutcomeId;
+    p.status = "pending_resolve";
+  }
+
+  let winningOutcome: OutcomeRow | undefined;
+  if (p.pool_kind === "custom") {
+    if (!p.winning_outcome_id) {
+      throw new Error("Elige la opción ganadora antes de resolver");
+    }
+    winningOutcome = outcomeList.find((o) => o.id === p.winning_outcome_id);
+  } else {
+    if (!p.winning_week_id) throw new Error("Semana ganadora aún no definida");
+    winningOutcome = outcomeList.find((o) => o.week_id === p.winning_week_id);
+  }
+
+  if (!p.twitch_prediction_id) throw new Error("Prediction de Twitch no vinculada");
   if (!winningOutcome?.twitch_outcome_id) {
-    throw new Error("Outcome de Twitch no encontrado para la semana ganadora");
+    throw new Error("Outcome de Twitch no encontrado para el ganador");
   }
 
   const tokens = await getValidTwitchTokens();
@@ -163,6 +192,7 @@ export async function resolveBettingPool(poolId: string): Promise<ResolveResult>
   return {
     poolId,
     winningWeekId: p.winning_week_id,
+    winningOutcomeId: winningOutcome.id,
     raffleWinner: winner
       ? {
           twitch_user_id: winner.userId,

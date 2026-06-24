@@ -69,6 +69,7 @@ Proyecto **`ucjuxngjmcdwggishima`**. Verificado **2026-06-18** vía Management A
 | `db/39_search_target_fixup.sql` | **Aplicada 2026-06-21** (reglas `search`: cofre/munición en `target_object`, no `required_object`; corrige db/31) |
 | `db/40_mission_tweaks.sql` | **Aplicada 2026-06-19** (ajustes prestigio S2–S10: plasma 200, pelota 30, visita S3 restaurada, comida×5, espada infinito, materiales 0/1500, engine suma AND+value) |
 | `db/41_mansion_90.sql` | **Aplicada 2026-06-19** (prestigio S6 mansión superhéroes: sobrevivir 90 jugadores) |
+| `db/43_betting_custom_pools.sql` | **Aplicada 2026-06-19** (apuestas libres, semanas incompletas, winning_outcome_id) |
 
 Marcadores de db/19 confirmados en remoto: columna `challenge_rules.rule_group`, objeto `chug_jug` + efecto use→gain, condiciones supervisor (`within_10s_landing`, `win_match`, `no_damage_between`, `no_named_chests`), prestigio cardinales opuestos. **db/20:** prestigio W1 — texto formal explosiva+escopeta; P1 sustituido por asalto+francotirador misma partida (2 reglas kill). Temporadas: `season_8` activa; `season_9`/`season_10` con `is_locked=true` (sin datos de desafíos).
 

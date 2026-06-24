@@ -24,7 +24,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "Pool no encontrado" }, { status: 404 });
   }
 
-  if (pool.twitch_prediction_id && pool.status === "open") {
+  if (pool.twitch_prediction_id && ["open", "locked"].includes(pool.status)) {
     const tokens = await getValidTwitchTokens();
     if (tokens) {
       try {
