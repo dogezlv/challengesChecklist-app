@@ -78,6 +78,13 @@ export default function BettingPanel({
   const [pool, setPool] = useState<Pool | null>(null);
   const [weekProgress, setWeekProgress] = useState<WeekProgress[]>([]);
   const [eventSub, setEventSub] = useState<EventSubStatus | null>(null);
+  const [oauthRedirectUri, setOauthRedirectUri] = useState<string | null>(null);
+  const [twitchConfig, setTwitchConfig] = useState<{
+    hasClientId: boolean;
+    hasClientSecret: boolean;
+    hasServiceRole: boolean;
+    ignoredLocalhostOnVercel: boolean;
+  } | null>(null);
 
   const [seasonId, setSeasonId] = useState(seasons[0]?.id ?? "");
   const [title, setTitle] = useState("¿Qué semana se completa primero?");
@@ -102,11 +109,16 @@ export default function BettingPanel({
   const refresh = useCallback(async () => {
     try {
       const res = await fetch("/api/admin/betting/status");
-      if (!res.ok) return;
       const data = await res.json();
+      if (!res.ok) {
+        setMessage(data.error ?? "Error al cargar estado de apuestas");
+        return;
+      }
       setTwitchConnected(data.twitchConnected);
       setBroadcaster(data.broadcaster);
       setEventSub(data.eventSub ?? null);
+      setOauthRedirectUri(data.oauthRedirectUri ?? null);
+      setTwitchConfig(data.twitchConfig ?? null);
       setWeekProgress(data.weekProgress ?? []);
       const active = data.activePool as Pool | null;
       setPool(active);
@@ -132,8 +144,42 @@ export default function BettingPanel({
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("connected") === "1") setMessage("Twitch conectado correctamente.");
-    if (params.get("error")) setMessage(`Error OAuth: ${params.get("error")}`);
+    if (params.get("connected") === "1") {
+      setMessage("Twitch conectado correctamente.");
+      window.history.replaceState({}, "", "/admin/betting");
+      return;
+    }
+    const err = params.get("error");
+    if (!err) return;
+    if (err === "redirect_mismatch") {
+      const uri = params.get("expected_uri");
+      setMessage(
+        uri
+          ? `OAuth: redirect URI no registrado en Twitch. Añade exactamente esta URL en dev.twitch.tv → tu app → OAuth Redirect URLs:\n${uri}`
+          : "OAuth: redirect URI no coincide con el registrado en Twitch Developer Console."
+      );
+    } else if (err === "oauth_state") {
+      setMessage("OAuth: sesión expirada. Vuelve a pulsar Conectar Twitch.");
+    } else if (err === "token_exchange") {
+      setMessage("OAuth: falló el intercambio de token. Revisa TWITCH_CLIENT_SECRET (sin espacios al final) y vuelve a desplegar en Vercel.");
+    } else if (err === "config") {
+      const detail = params.get("detail");
+      setMessage(
+        detail
+          ? `Configuración Twitch: ${detail}`
+          : "Faltan variables TWITCH_* o SUPABASE_SERVICE_ROLE_KEY en el servidor. Guarda en Vercel y redepliega."
+      );
+    } else if (err === "db_save") {
+      const detail = params.get("detail");
+      setMessage(
+        detail
+          ? `No se pudo guardar el token en Supabase: ${detail}`
+          : "No se pudo guardar el token en Supabase."
+      );
+    } else {
+      setMessage(`Error OAuth: ${err}`);
+    }
+    window.history.replaceState({}, "", "/admin/betting");
   }, []);
 
   async function saveDraft() {
@@ -395,6 +441,43 @@ export default function BettingPanel({
               <p style={{ color: fnt.textDim, marginBottom: 12 }}>
                 El streamer debe autorizar la app una vez (solo Predictions).
               </p>
+              {oauthRedirectUri && (
+                <p
+                  style={{
+                    color: fnt.textMuted,
+                    fontSize: fs(11, 13),
+                    marginBottom: 12,
+                    wordBreak: "break-all",
+                    lineHeight: 1.4,
+                  }}
+                >
+                  Redirect OAuth (debe estar en Twitch Developer Console):{" "}
+                  <code style={{ color: "#9fc9f5" }}>{oauthRedirectUri}</code>
+                </p>
+              )}
+              {twitchConfig?.ignoredLocalhostOnVercel && (
+                <p style={{ color: fnt.yellow, fontSize: fs(12, 15), marginBottom: 12 }}>
+                  En Vercel se ignoran URLs con localhost en NEXT_PUBLIC_APP_URL /
+                  TWITCH_OAUTH_REDIRECT_URI. Usa tu dominio real en Production o deja
+                  que la app calcule la redirect automáticamente.
+                </p>
+              )}
+              {twitchConfig &&
+                (!twitchConfig.hasClientId ||
+                  !twitchConfig.hasClientSecret ||
+                  !twitchConfig.hasServiceRole) && (
+                  <p style={{ color: fnt.red, fontSize: fs(12, 15), marginBottom: 12 }}>
+                    Faltan variables en el servidor:{" "}
+                    {[
+                      !twitchConfig.hasClientId && "TWITCH_CLIENT_ID",
+                      !twitchConfig.hasClientSecret && "TWITCH_CLIENT_SECRET",
+                      !twitchConfig.hasServiceRole && "SUPABASE_SERVICE_ROLE_KEY",
+                    ]
+                      .filter(Boolean)
+                      .join(", ")}
+                    . Tras guardar en Vercel, haz <strong>Redeploy</strong>.
+                  </p>
+                )}
               <a href="/api/twitch/oauth/start" style={yellowButton}>
                 Conectar Twitch
               </a>

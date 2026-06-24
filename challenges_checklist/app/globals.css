@@ -91,6 +91,59 @@ body {
   }
 }
 
+/* Pestaña en segundo plano o modo ligero del tracker: sin animación de malla */
+.fn-bg--paused .fn-bg-mesh--a,
+.fn-bg--paused .fn-bg-mesh--b,
+.fn-bg-mesh--paused {
+  animation-play-state: paused !important;
+}
+html[data-lite="on"] .fn-bg-mesh {
+  animation-play-state: paused !important;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .fn-bg-mesh {
+    animation: none !important;
+  }
+}
+
+/* Filas de misión fuera del viewport: menos layout/paint en listas largas */
+.tracker-mission-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
+}
+
+/* Cuerpo desplegable de semanas en /tracker (solo montado al abrir) */
+@keyframes trackerWeekBodyIn {
+  from {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+.tracker-week-body {
+  animation: trackerWeekBodyIn 0.32s cubic-bezier(0.4, 0, 0.2, 1);
+  transform-origin: top center;
+}
+.tracker-week-chevron {
+  display: inline-block;
+  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
+}
+.tracker-week-chevron[data-expanded="true"] {
+  transform: rotate(90deg);
+}
+@media (prefers-reduced-motion: reduce) {
+  .tracker-week-body {
+    animation: none;
+  }
+  .tracker-week-chevron {
+    transition: none;
+  }
+}
+
 /* Tinte de PRESTIGIO sobre el fondo: lavado de color (de la semana) en los
    bordes que late suavemente. Apagado por defecto; se enciende cuando
    ChallengeChecklist pone html[data-prestige="on"] + --prestige-accent. */

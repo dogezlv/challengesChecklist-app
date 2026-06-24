@@ -20,7 +20,16 @@ const navPanelLook: React.CSSProperties = {
   boxShadow: "0 6px 18px rgba(0,0,0,0.22)",
 };
 
-function navShell(sticky: boolean): React.CSSProperties {
+function navShell(sticky: boolean, solidSurface: boolean): React.CSSProperties {
+  const panelLook: React.CSSProperties = solidSurface
+    ? {
+        borderRadius: NAV_RADIUS,
+        border: `1px solid ${fnt.border}`,
+        background:
+          "linear-gradient(180deg, rgba(12, 58, 118, 0.98) 0%, rgba(6, 32, 74, 1) 100%)",
+        boxShadow: "0 6px 18px rgba(0,0,0,0.22)",
+      }
+    : navPanelLook;
   return {
     display: "flex",
     alignItems: "center",
@@ -30,7 +39,7 @@ function navShell(sticky: boolean): React.CSSProperties {
     padding: `${fs(10, 14)} ${fs(14, 22)}`,
     ...(sticky
       ? {
-          ...navPanelLook,
+          ...panelLook,
           position: "sticky",
           top: fs(6, 10),
           zIndex: 100,
@@ -66,11 +75,14 @@ export default function TopNav({
   tabs,
   right,
   sticky = false,
+  solidSurface = false,
   matchControls,
 }: {
   tabs: NavTab[];
   right?: React.ReactNode;
   sticky?: boolean;
+  /** Sin backdrop-filter (mejor rendimiento con stream en otra ventana). */
+  solidSurface?: boolean;
   matchControls?: {
     activeMatch: Match | null;
     busy: boolean;
@@ -80,7 +92,7 @@ export default function TopNav({
   };
 }) {
   const nav = (
-    <nav style={navShell(sticky)}>
+    <nav style={navShell(sticky, solidSurface)}>
       <div
         style={{
           display: "flex",

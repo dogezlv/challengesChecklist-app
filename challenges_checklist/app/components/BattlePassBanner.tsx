@@ -14,6 +14,7 @@ export default function BattlePassBanner({
   accent,
   flush = false,
   prestige = false,
+  expandControl,
 }: {
   label: string;
   title: string;
@@ -25,6 +26,8 @@ export default function BattlePassBanner({
   // modo prestigio: "imbuye" el banner del color de la semana (más intenso +
   // glow interior), sin volverlo de otro color
   prestige?: boolean;
+  /** Flecha de acordeón (tracker): › cerrado, girada abajo abierto */
+  expandControl?: { expanded: boolean };
 }) {
   const base = accent ? accentBanner(accent) : banner;
   const imbue: React.CSSProperties = prestige
@@ -51,6 +54,23 @@ export default function BattlePassBanner({
         }}
       >
         <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          {expandControl && (
+            <span
+              className="tracker-week-chevron"
+              data-expanded={expandControl.expanded ? "true" : "false"}
+              aria-hidden
+              style={{
+                color: "#eafaff",
+                fontWeight: 900,
+                fontSize: fs(20, 32),
+                lineHeight: 1,
+                textShadow: "0 2px 6px rgba(0,0,0,0.45)",
+                flexShrink: 0,
+              }}
+            >
+              ›
+            </span>
+          )}
           <FortniteIcon code="battle_star" emoji="⭐" size={30} />
           <div>
             <div

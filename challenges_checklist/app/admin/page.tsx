@@ -1,6 +1,7 @@
 import { createClient } from "@/utils/supabase/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
+import { phoneSecretUrl } from "@/app/lib/phoneDial";
 import AdminPanel from "./AdminPanel";
 
 export default async function AdminPage() {
@@ -47,6 +48,10 @@ export default async function AdminPage() {
 
   return (
     <AdminPanel
+      phoneLinks={{
+        durr: phoneSecretUrl("durr"),
+        pizza: phoneSecretUrl("pizza"),
+      }}
       actionTypes={actionTypes.data ?? []}
       tags={tags.data ?? []}
       gameObjects={gameObjects.data ?? []}

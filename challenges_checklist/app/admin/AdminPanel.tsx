@@ -176,6 +176,7 @@ export default function AdminPanel({
   locations,
   challenges,
   challengeLines,
+  phoneLinks,
 }: {
   actionTypes: Row[];
   tags: Row[];
@@ -183,6 +184,7 @@ export default function AdminPanel({
   locations: Row[];
   challenges: Challenge[];
   challengeLines: Row[];
+  phoneLinks: { durr: string | null; pizza: string | null };
 }) {
   const supabase = createClient();
   const [message, setMessage] = useState("");
@@ -367,6 +369,49 @@ export default function AdminPanel({
       >
         Panel Admin
       </h1>
+
+      <section
+        style={{
+          ...panel,
+          marginTop: 16,
+          marginBottom: 8,
+          padding: fs(14, 20),
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: titleFont,
+            fontSize: fs(15, 20),
+            margin: "0 0 10px",
+            textTransform: "uppercase",
+          }}
+        >
+          Teléfonos — enlaces secretos
+        </h2>
+        {!phoneLinks.durr || !phoneLinks.pizza ? (
+          <p style={{ margin: 0, color: fnt.red, fontSize: fs(13, 15) }}>
+            Falta <code>PHONE_DIAL_SECRET</code> en Vercel (Environment
+            Variables) → Redeploy.
+          </p>
+        ) : (
+          <div style={{ display: "grid", gap: 10, fontSize: fs(12, 14) }}>
+            <div>
+              <div style={{ color: fnt.textDim, marginBottom: 4 }}>
+                Durr Burger
+              </div>
+              <a href={phoneLinks.durr} style={{ color: "#9fc9f5", wordBreak: "break-all" }}>
+                {phoneLinks.durr}
+              </a>
+            </div>
+            <div>
+              <div style={{ color: fnt.textDim, marginBottom: 4 }}>Pizza Pit</div>
+              <a href={phoneLinks.pizza} style={{ color: "#9fc9f5", wordBreak: "break-all" }}>
+                {phoneLinks.pizza}
+              </a>
+            </div>
+          </div>
+        )}
+      </section>
 
       {message && (
         <p

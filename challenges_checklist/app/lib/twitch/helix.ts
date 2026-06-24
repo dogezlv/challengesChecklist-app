@@ -9,28 +9,74 @@ export type TwitchTokens = {
   expires_at: string;
 };
 
+/** Quita espacios/saltos de línea al copiar desde Vercel o .env */
+function trimEnv(name: string): string | undefined {
+  const raw = process.env[name];
+  if (raw == null) return undefined;
+  const v = raw.trim();
+  return v || undefined;
+}
+
+export function twitchConfigStatus() {
+  const clientId = trimEnv("TWITCH_CLIENT_ID");
+  const clientSecret = trimEnv("TWITCH_CLIENT_SECRET");
+  const serviceRole = trimEnv("SUPABASE_SERVICE_ROLE_KEY");
+  const explicitAppUrl = trimEnv("NEXT_PUBLIC_APP_URL");
+  const explicitRedirect = trimEnv("TWITCH_OAUTH_REDIRECT_URI");
+  const base = appBaseUrl();
+  const redirect = twitchRedirectUri();
+  return {
+    hasClientId: !!clientId,
+    hasClientSecret: !!clientSecret,
+    hasServiceRole: !!serviceRole,
+    appBaseUrl: base,
+    oauthRedirectUri: redirect,
+    explicitAppUrl: explicitAppUrl ?? null,
+    explicitRedirect: explicitRedirect ?? null,
+    ignoredLocalhostOnVercel:
+      isVercelProduction() &&
+      (!!explicitAppUrl?.includes("localhost") ||
+        !!explicitRedirect?.includes("localhost")),
+  };
+}
+
 export function twitchClientId(): string {
-  const id = process.env.TWITCH_CLIENT_ID;
+  const id = trimEnv("TWITCH_CLIENT_ID");
   if (!id) throw new Error("TWITCH_CLIENT_ID not configured");
   return id;
 }
 
 export function twitchClientSecret(): string {
-  const secret = process.env.TWITCH_CLIENT_SECRET;
+  const secret = trimEnv("TWITCH_CLIENT_SECRET");
   if (!secret) throw new Error("TWITCH_CLIENT_SECRET not configured");
   return secret;
 }
 
-export function twitchRedirectUri(): string {
-  return (
-    process.env.TWITCH_OAUTH_REDIRECT_URI ??
-    `${appBaseUrl()}/api/twitch/oauth/callback`
-  );
+function isVercelProduction(): boolean {
+  return process.env.VERCEL === "1";
 }
 
 export function appBaseUrl(): string {
-  const url = process.env.NEXT_PUBLIC_APP_URL ?? "http://localhost:3000";
-  return url.replace(/\/$/, "");
+  const explicit = trimEnv("NEXT_PUBLIC_APP_URL")?.replace(/\/$/, "");
+  if (explicit && !(isVercelProduction() && explicit.includes("localhost"))) {
+    return explicit;
+  }
+  const vercelHost = trimEnv("VERCEL_URL")?.replace(/\/$/, "");
+  if (vercelHost) {
+    return `https://${vercelHost}`;
+  }
+  return explicit ?? "http://localhost:3000";
+}
+
+export function twitchRedirectUri(): string {
+  const explicit = trimEnv("TWITCH_OAUTH_REDIRECT_URI");
+  if (
+    explicit &&
+    !(isVercelProduction() && explicit.includes("localhost"))
+  ) {
+    return explicit;
+  }
+  return `${appBaseUrl()}/api/twitch/oauth/callback`;
 }
 
 export function eventsubCallbackUrl(): string {
@@ -38,7 +84,7 @@ export function eventsubCallbackUrl(): string {
 }
 
 export function eventsubSecret(): string {
-  const secret = process.env.TWITCH_EVENTSUB_SECRET;
+  const secret = trimEnv("TWITCH_EVENTSUB_SECRET");
   if (!secret) throw new Error("TWITCH_EVENTSUB_SECRET not configured");
   return secret;
 }

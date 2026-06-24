@@ -1,17 +1,39 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/app/lib/admin-auth";
 import { createServiceClient } from "@/app/lib/supabase-service";
-import { getPredictionEventSubStatus, getValidTwitchTokens } from "@/app/lib/twitch/helix";
+import { getPredictionEventSubStatus, getValidTwitchTokens, twitchConfigStatus, twitchRedirectUri } from "@/app/lib/twitch/helix";
 import { processPendingResolves } from "@/app/lib/twitch/resolve-pool";
 
 export async function GET() {
   const auth = await requireAdmin();
   if ("error" in auth && auth.error) return auth.error;
 
-  await processPendingResolves();
+  try {
+    await processPendingResolves();
+  } catch (e) {
+    console.warn("processPendingResolves:", e);
+  }
 
-  const service = createServiceClient();
-  const tokens = await getValidTwitchTokens();
+  let tokens = null;
+  try {
+    tokens = await getValidTwitchTokens();
+  } catch (e) {
+    console.warn("getValidTwitchTokens:", e);
+  }
+
+  let service;
+  try {
+    service = createServiceClient();
+  } catch (e) {
+    console.error("createServiceClient:", e);
+    return NextResponse.json(
+      {
+        error: "Falta SUPABASE_SERVICE_ROLE_KEY en el servidor",
+        twitchConfig: twitchConfigStatus(),
+      },
+      { status: 500 }
+    );
+  }
 
   const { data: pools } = await service
     .from("betting_pools")
@@ -62,6 +84,8 @@ export async function GET() {
 
   return NextResponse.json({
     twitchConnected: !!tokens,
+    oauthRedirectUri: twitchRedirectUri(),
+    twitchConfig: twitchConfigStatus(),
     broadcaster: tokens
       ? {
           id: tokens.broadcaster_id,

@@ -1,31 +1,126 @@
 "use client";
 
+import type { ReactNode } from "react";
 import type { Season, Week } from "../lib/selection";
 import { fnt, fs, pillTab, titleFont } from "../lib/theme";
 
+type SeasonWeekBase = {
+  seasons: Season[];
+  weeks: Week[];
+  seasonCode: string;
+  onSelectSeason: (code: string) => void;
+};
+
+type WeekTabsSingle = SeasonWeekBase & {
+  multiSelect?: false;
+  weekNumber: number;
+  onSelectWeek: (weekNumber: number) => void;
+  allSelected?: boolean;
+  onSelectAll?: () => void;
+};
+
+type WeekTabsMulti = SeasonWeekBase & {
+  multiSelect: true;
+  selectedWeeks: number[];
+  onToggleWeek: (weekNumber: number) => void;
+  onSelectAllWeeks: () => void;
+  onSelectNoneWeeks: () => void;
+};
+
 // Pestañas estilo dashboard Fortnite (Season X): botones de temporada con su
 // arte oficial y píldoras de semana tipo EVENT / MISSIONS / STYLE.
-export default function WeekTabs({
+export default function WeekTabs(props: WeekTabsSingle | WeekTabsMulti) {
+  if (props.multiSelect) {
+    return <WeekTabsMultiView {...props} />;
+  }
+  return <WeekTabsSingleView {...props} />;
+}
+
+function WeekTabsMultiView({
   seasons,
   weeks,
   seasonCode,
-  weekNumber,
   onSelectSeason,
+  selectedWeeks,
+  onToggleWeek,
+  onSelectAllWeeks,
+  onSelectNoneWeeks,
+}: WeekTabsMulti) {
+  const selectedSet = new Set(selectedWeeks);
+  return (
+    <WeekTabsLayout
+      seasons={seasons}
+      weeks={weeks}
+      seasonCode={seasonCode}
+      onSelectSeason={onSelectSeason}
+      weekSelected={(n) => selectedSet.has(n)}
+      onWeekClick={onToggleWeek}
+      weekExtras={
+        <>
+          <button style={pillTab(false)} onClick={onSelectAllWeeks}>
+            Todas
+          </button>
+          <button style={pillTab(false)} onClick={onSelectNoneWeeks}>
+            Ninguna
+          </button>
+        </>
+      }
+    />
+  );
+}
+
+function WeekTabsSingleView({
+  seasons,
+  weeks,
+  seasonCode,
+  onSelectSeason,
+  weekNumber,
   onSelectWeek,
   allSelected = false,
   onSelectAll,
+}: WeekTabsSingle) {
+  return (
+    <WeekTabsLayout
+      seasons={seasons}
+      weeks={weeks}
+      seasonCode={seasonCode}
+      onSelectSeason={onSelectSeason}
+      weekSelected={(n) => !allSelected && weekNumber === n}
+      onWeekClick={onSelectWeek}
+      weekExtras={
+        onSelectAll ? (
+          <button
+            style={{
+              ...pillTab(allSelected),
+              ...(allSelected ? { borderColor: fnt.yellow } : {}),
+            }}
+            onClick={onSelectAll}
+          >
+            Todas las semanas
+          </button>
+        ) : null
+      }
+    />
+  );
+}
+
+function WeekTabsLayout({
+  seasons,
+  weeks,
+  seasonCode,
+  onSelectSeason,
+  weekSelected,
+  onWeekClick,
+  weekExtras,
 }: {
   seasons: Season[];
   weeks: Week[];
   seasonCode: string;
-  weekNumber: number;
   onSelectSeason: (code: string) => void;
-  onSelectWeek: (weekNumber: number) => void;
-  allSelected?: boolean;
-  onSelectAll?: () => void;
+  weekSelected: (weekNumber: number) => boolean;
+  onWeekClick: (weekNumber: number) => void;
+  weekExtras: ReactNode;
 }) {
-  // botones de temporada estilo "nav de temporadas" del juego: la imagen
-  // oficial de fondo y un candado en las temporadas bloqueadas
   const seasonBase: React.CSSProperties = {
     position: "relative",
     width: fs(160, 280),
@@ -88,27 +183,17 @@ export default function WeekTabs({
           );
         })}
       </div>
-      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
         {weeks.map((w) => (
           <button
             key={w.id}
-            style={pillTab(!allSelected && w.week_number === weekNumber)}
-            onClick={() => onSelectWeek(w.week_number)}
+            style={pillTab(weekSelected(w.week_number))}
+            onClick={() => onWeekClick(w.week_number)}
           >
             {w.display_name ?? `Semana ${w.week_number}`}
           </button>
         ))}
-        {onSelectAll && (
-          <button
-            style={{
-              ...pillTab(allSelected),
-              ...(allSelected ? { borderColor: fnt.yellow } : {}),
-            }}
-            onClick={onSelectAll}
-          >
-            Todas las semanas
-          </button>
-        )}
+        {weekExtras}
       </div>
     </div>
   );
