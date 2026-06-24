@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import LogoutButton from "@/app/components/LogoutButton";
 import PageBackground from "@/app/components/PageBackground";
@@ -132,6 +132,14 @@ export default function BettingPanel({
   const [customTitle, setCustomTitle] = useState("¿Quién gana?");
   const [manualWinnerId, setManualWinnerId] = useState("");
 
+  /** Evita que el polling cada 5s pise semanas/duración mientras editas sin guardar. */
+  const formDirtyRef = useRef(false);
+  const syncedDraftIdRef = useRef<string | null>(null);
+
+  const markFormDirty = useCallback(() => {
+    formDirtyRef.current = true;
+  }, []);
+
   const poolKind = tab === "custom" ? "custom" : "week_race";
   const weeks = weeksBySeason[seasonId] ?? [];
 
@@ -190,41 +198,51 @@ export default function BettingPanel({
       const active = data.activePool as Pool | null;
       setPool(active);
 
-      if (data.eligibleWeeks?.length) {
-        if (active?.status === "draft" && active.pool_kind !== "custom") {
-          const titles: Record<string, string> = {};
-          for (const o of active.betting_pool_outcomes ?? []) {
-            if (o.week_id) titles[o.week_id] = o.outcome_title;
-          }
-          const ids = new Set(
-            (active.betting_pool_outcomes ?? [])
-              .map((o) => o.week_id)
-              .filter(Boolean) as string[]
-          );
-          setEligibleWeeks(data.eligibleWeeks);
-          setSelectedWeekIds(
-            ids.size > 0 ? ids : new Set(data.eligibleWeeks.map((w: Week) => w.id))
-          );
-          setWeekTitles((prev) => ({ ...prev, ...titles }));
-        } else if (!active || active.status !== "draft") {
-          syncEligibleSelection(data.eligibleWeeks);
-        }
+      const draftId = active?.status === "draft" ? active.id : null;
+      const draftChanged = draftId !== syncedDraftIdRef.current;
+      if (draftChanged) {
+        syncedDraftIdRef.current = draftId;
+        formDirtyRef.current = false;
       }
 
-      if (active?.status === "draft") {
-        setSeasonId(active.season_id);
-        if (active.pool_kind === "custom") {
-          setTab("custom");
-          setCustomTitle(active.title);
+      const eligible = (data.eligibleWeeks ?? []) as Week[];
+      if (eligible.length) {
+        setEligibleWeeks(eligible);
+      }
+
+      const shouldSyncForm =
+        eligible.length > 0 && (draftChanged || !formDirtyRef.current);
+
+      if (shouldSyncForm) {
+        if (active?.status === "draft") {
+          setSeasonId(active.season_id);
           setDurationSeconds(active.duration_seconds);
-          setCustomOutcomes(
-            (active.betting_pool_outcomes ?? []).map((o) => o.outcome_title)
-          );
-        } else {
-          setTab("weeks");
-          setTitle(active.title);
-          setWinMode(active.win_mode as "normales" | "normales_prestigio");
-          setDurationSeconds(active.duration_seconds);
+          if (active.pool_kind === "custom") {
+            setTab("custom");
+            setCustomTitle(active.title);
+            setCustomOutcomes(
+              (active.betting_pool_outcomes ?? []).map((o) => o.outcome_title)
+            );
+          } else {
+            setTab("weeks");
+            setTitle(active.title);
+            setWinMode(active.win_mode as "normales" | "normales_prestigio");
+            const titles: Record<string, string> = {};
+            for (const o of active.betting_pool_outcomes ?? []) {
+              if (o.week_id) titles[o.week_id] = o.outcome_title;
+            }
+            const ids = new Set(
+              (active.betting_pool_outcomes ?? [])
+                .map((o) => o.week_id)
+                .filter(Boolean) as string[]
+            );
+            setSelectedWeekIds(
+              ids.size > 0 ? ids : new Set(eligible.map((w) => w.id))
+            );
+            setWeekTitles((prev) => ({ ...prev, ...titles }));
+          }
+        } else if (!active || active.status !== "draft") {
+          syncEligibleSelection(eligible);
         }
       }
     } catch {
@@ -250,7 +268,11 @@ export default function BettingPanel({
     if (winMode && seasonId) {
       void fetch(`/api/admin/betting/status?season_id=${seasonId}`).then(async (res) => {
         const data = await res.json();
-        if (data.eligibleWeeks && (!pool || pool.status !== "draft")) {
+        if (
+          data.eligibleWeeks &&
+          !formDirtyRef.current &&
+          (!pool || pool.status !== "draft")
+        ) {
           syncEligibleSelection(data.eligibleWeeks);
           setCanCreateWeekPool(data.canCreateWeekPool);
         }
@@ -259,6 +281,7 @@ export default function BettingPanel({
   }, [winMode, seasonId, pool?.status, syncEligibleSelection]);
 
   function toggleWeek(id: string) {
+    markFormDirty();
     setSelectedWeekIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) {
@@ -275,6 +298,8 @@ export default function BettingPanel({
   }
 
   function startNewPool() {
+    formDirtyRef.current = false;
+    syncedDraftIdRef.current = null;
     setPool(null);
     setMessage("");
     setManualWinnerId("");
@@ -312,6 +337,8 @@ export default function BettingPanel({
         throw new Error("No se pudo guardar el borrador");
       }
       setPool(data.pool);
+      formDirtyRef.current = false;
+      syncedDraftIdRef.current = data.pool.id;
       setMessage("Configuración guardada.");
       await refresh();
     } catch (e) {
@@ -360,6 +387,8 @@ export default function BettingPanel({
       if (!saveData.pool?.id) {
         throw new Error("No se pudo crear el borrador de la apuesta");
       }
+      formDirtyRef.current = false;
+      syncedDraftIdRef.current = saveData.pool.id;
 
       const res = await fetch("/api/admin/betting/open", {
         method: "POST",
@@ -652,10 +681,10 @@ export default function BettingPanel({
         )}
 
         <div style={{ display: "flex", gap: 8, marginBottom: 16, flexWrap: "wrap" }}>
-          <button type="button" style={pillTab(tab === "weeks")} onClick={() => setTab("weeks")}>
+          <button type="button" style={pillTab(tab === "weeks")} onClick={() => { markFormDirty(); setTab("weeks"); }}>
             Por semanas
           </button>
-          <button type="button" style={pillTab(tab === "custom")} onClick={() => setTab("custom")}>
+          <button type="button" style={pillTab(tab === "custom")} onClick={() => { markFormDirty(); setTab("custom"); }}>
             Apuesta libre
           </button>
           <button
@@ -796,7 +825,10 @@ export default function BettingPanel({
                 <select
                   value={seasonId}
                   disabled={!canEdit || !!hasActivePool}
-                  onChange={(e) => setSeasonId(e.target.value)}
+                  onChange={(e) => {
+                    formDirtyRef.current = false;
+                    setSeasonId(e.target.value);
+                  }}
                   style={inputStyle}
                 >
                   {seasons.map((s) => (
@@ -817,7 +849,10 @@ export default function BettingPanel({
                       value={title}
                       disabled={!canEdit || !!hasActivePool}
                       maxLength={45}
-                      onChange={(e) => setTitle(e.target.value)}
+                      onChange={(e) => {
+                        markFormDirty();
+                        setTitle(e.target.value);
+                      }}
                       style={inputStyle}
                     />
                   </label>
@@ -828,9 +863,10 @@ export default function BettingPanel({
                     <select
                       value={winMode}
                       disabled={!canEdit || !!hasActivePool}
-                      onChange={(e) =>
-                        setWinMode(e.target.value as "normales" | "normales_prestigio")
-                      }
+                      onChange={(e) => {
+                        formDirtyRef.current = false;
+                        setWinMode(e.target.value as "normales" | "normales_prestigio");
+                      }}
                       style={inputStyle}
                     >
                       <option value="normales">Solo desafíos normales</option>
@@ -880,12 +916,13 @@ export default function BettingPanel({
                               value={weekTitles[w.id] ?? `Semana ${w.week_number}`}
                               disabled={!canEdit || !on || !!hasActivePool}
                               maxLength={25}
-                              onChange={(e) =>
+                              onChange={(e) => {
+                                markFormDirty();
                                 setWeekTitles((prev) => ({
                                   ...prev,
                                   [w.id]: e.target.value,
-                                }))
-                              }
+                                }));
+                              }}
                               style={{ ...inputStyle, flex: 1 }}
                             />
                           </div>
@@ -907,7 +944,10 @@ export default function BettingPanel({
                       value={customTitle}
                       disabled={!canEdit || !!hasActivePool}
                       maxLength={45}
-                      onChange={(e) => setCustomTitle(e.target.value)}
+                      onChange={(e) => {
+                        markFormDirty();
+                        setCustomTitle(e.target.value);
+                      }}
                       style={inputStyle}
                     />
                   </label>
@@ -922,6 +962,7 @@ export default function BettingPanel({
                           disabled={!canEdit || !!hasActivePool}
                           maxLength={25}
                           onChange={(e) => {
+                            markFormDirty();
                             const next = [...customOutcomes];
                             next[i] = e.target.value;
                             setCustomOutcomes(next);
@@ -932,9 +973,10 @@ export default function BettingPanel({
                           <button
                             type="button"
                             style={cancelBtn}
-                            onClick={() =>
-                              setCustomOutcomes(customOutcomes.filter((_, j) => j !== i))
-                            }
+                            onClick={() => {
+                              markFormDirty();
+                              setCustomOutcomes(customOutcomes.filter((_, j) => j !== i));
+                            }}
                           >
                             ×
                           </button>
@@ -945,7 +987,13 @@ export default function BettingPanel({
                       <button
                         type="button"
                         style={yellowButton}
-                        onClick={() => setCustomOutcomes([...customOutcomes, `Opción ${customOutcomes.length + 1}`])}
+                        onClick={() => {
+                          markFormDirty();
+                          setCustomOutcomes([
+                            ...customOutcomes,
+                            `Opción ${customOutcomes.length + 1}`,
+                          ]);
+                        }}
                       >
                         + Añadir opción
                       </button>
@@ -968,7 +1016,10 @@ export default function BettingPanel({
                         ...yellowButton,
                         opacity: durationSeconds === p.value ? 1 : 0.6,
                       }}
-                      onClick={() => setDurationSeconds(p.value)}
+                      onClick={() => {
+                        markFormDirty();
+                        setDurationSeconds(p.value);
+                      }}
                     >
                       {p.label}
                     </button>
