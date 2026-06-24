@@ -8,6 +8,14 @@ import {
   twitchRedirectUri,
 } from "@/app/lib/twitch/helix";
 
+function bettingRedirect(req: Request, params: Record<string, string>) {
+  const dest = new URL("/admin/betting", req.url);
+  for (const [key, value] of Object.entries(params)) {
+    dest.searchParams.set(key, value);
+  }
+  return NextResponse.redirect(dest);
+}
+
 export async function GET(req: Request) {
   const url = new URL(req.url);
   const code = url.searchParams.get("code");
@@ -15,17 +23,20 @@ export async function GET(req: Request) {
   const error = url.searchParams.get("error");
 
   if (error) {
-    return NextResponse.redirect(
-      `/admin/betting?error=${encodeURIComponent(error)}`
-    );
+    const params: Record<string, string> = { error };
+    if (error === "redirect_mismatch") {
+      params.expected_uri = twitchRedirectUri();
+    }
+    return bettingRedirect(req, params);
   }
 
+  try {
   const cookieStore = await cookies();
   const savedState = cookieStore.get("twitch_oauth_state")?.value;
   cookieStore.delete("twitch_oauth_state");
 
   if (!code || !state || state !== savedState) {
-    return NextResponse.redirect("/admin/betting?error=oauth_state");
+    return bettingRedirect(req, { error: "oauth_state" });
   }
 
   const tokenRes = await fetch("https://id.twitch.tv/oauth2/token", {
@@ -41,7 +52,7 @@ export async function GET(req: Request) {
   });
 
   if (!tokenRes.ok) {
-    return NextResponse.redirect("/admin/betting?error=token_exchange");
+    return bettingRedirect(req, { error: "token_exchange" });
   }
 
   const tokenData = (await tokenRes.json()) as {
@@ -58,7 +69,7 @@ export async function GET(req: Request) {
     },
   });
   if (!userRes.ok) {
-    return NextResponse.redirect("/admin/betting?error=user_fetch");
+    return bettingRedirect(req, { error: "user_fetch" });
   }
 
   const userData = (await userRes.json()) as {
@@ -66,13 +77,13 @@ export async function GET(req: Request) {
   };
   const user = userData.data[0];
   if (!user) {
-    return NextResponse.redirect("/admin/betting?error=no_user");
+    return bettingRedirect(req, { error: "no_user" });
   }
 
   const service = createServiceClient();
   const expiresAt = new Date(Date.now() + tokenData.expires_in * 1000).toISOString();
 
-  await service.from("twitch_tokens").upsert(
+  const { error: upsertError } = await service.from("twitch_tokens").upsert(
     {
       broadcaster_id: user.id,
       broadcaster_login: user.login,
@@ -86,11 +97,21 @@ export async function GET(req: Request) {
     { onConflict: "broadcaster_id" }
   );
 
+  if (upsertError) {
+    console.error("twitch_tokens upsert:", upsertError);
+    return bettingRedirect(req, { error: "db_save", detail: upsertError.message });
+  }
+
   try {
     await ensurePredictionEventSub(user.id);
   } catch (e) {
     console.warn("EventSub registration after OAuth:", e);
   }
 
-  return NextResponse.redirect("/admin/betting?connected=1");
+  return bettingRedirect(req, { connected: "1" });
+  } catch (e) {
+    console.error("Twitch OAuth callback:", e);
+    const msg = e instanceof Error ? e.message : "callback_failed";
+    return bettingRedirect(req, { error: "config", detail: msg });
+  }
 }

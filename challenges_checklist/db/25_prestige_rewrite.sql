@@ -144,7 +144,7 @@ begin
   perform pg_temp.rl(v, 'kill', null, null, null, null, 'retail_row');
   perform pg_temp.rl(v, 'kill', null, null, null, null, 'junk_juction');
 
-  v := pg_temp.mk(1, 'Destruye 3 vehículos conducidos por un oponente', 'progress', 'count', 'any_match', 3);
+  v := pg_temp.mk(1, 'Destruye un vehículo conducido por un oponente', 'progress', 'count', 'any_match', 1);
   perform pg_temp.rl(v, 'destroy', null, null, null, 'vehicle');
 
   v := pg_temp.mk(1, 'Consigue una eliminación con un arma explosiva y una escopeta en la misma partida', 'progress', 'count', 'same_match', 2);
@@ -351,9 +351,9 @@ begin
   perform pg_temp.rl(v, 'visit', null, null, null, null, 'giant_phone_durr');
   perform pg_temp.rl(v, 'visit', null, null, null, null, 'giant_phone_pizza');
 
-  v := pg_temp.mk(8, 'Elimina oponentes usando al menos un globo', 'progress', 'count', 'any_match', 3);
+  v := pg_temp.mk(8, 'Elimina oponentes usando al menos 3 globos', 'progress', 'count', 'any_match', 3);
   r := pg_temp.rl(v, 'kill');
-  perform pg_temp.cn(r, 'while_balloon', '🎈 Usando al menos un globo');
+  perform pg_temp.cn(r, 'while_balloon', '🎈 Usando globos');
 
   v := pg_temp.mk(8, 'Inflige daño de caída a un oponente usando granadas de impulso en diferentes partidas', 'progress', 'count', 'different_matches', 2);
   r := pg_temp.rl(v, 'damage', 'impulse_grenade');
@@ -383,9 +383,9 @@ begin
   perform pg_temp.rl(v, 'dance', null, null, null, null, 'throne');
   perform pg_temp.rl(v, 'dance', null, null, null, null, 'watchtower');
 
-  v := pg_temp.mk(9, 'Elimina a un oponente reanimado', 'progress', 'count', 'any_match', 1);
+  v := pg_temp.mk(9, 'Elimina a un oponente después de ser reanimado por una furgoneta de reinicio', 'progress', 'count', 'any_match', 1);
   r := pg_temp.rl(v, 'kill');
-  perform pg_temp.cn(r, 'target_revived', '🔁 Oponente reanimado');
+  perform pg_temp.cn(r, 'target_revived', '🔁 Reanimado por furgoneta de reinicio');
 
   v := pg_temp.mk(9, 'Elimina a oponentes en la misma partida', 'progress', 'count', 'same_match', 7);
   perform pg_temp.rl(v, 'kill');
@@ -406,7 +406,9 @@ begin
   perform pg_temp.rl(v, 'kill', 'infantry_rifle');
   perform pg_temp.rl(v, 'kill', 'heavy_ar');
 
-  v := pg_temp.mk(10, 'Recolecta 500 de metal en una sola partida', 'progress', 'value', 'same_match', 500);
+  v := pg_temp.mk(10, 'Recolecta 500 de cada material en la misma partida', 'progress', 'value', 'same_match', 500);
+  perform pg_temp.rl(v, 'harvest', null, null, 'wood');
+  perform pg_temp.rl(v, 'harvest', null, null, 'stone');
   perform pg_temp.rl(v, 'harvest', null, null, 'metal');
 
   v := pg_temp.mk(10, 'Usa bombas de sombra en diferentes partidas', 'progress', 'count', 'different_matches', 5);

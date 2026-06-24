@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { memo, useState } from "react";
 import FortniteIcon from "./FortniteIcon";
 import ImageViewerModal from "./ImageViewerModal";
 import {
@@ -10,7 +10,7 @@ import {
 } from "@/app/lib/missionAssets";
 import { accentFill, bodyFont, fnt, fs, progressTrack, titleFont } from "../lib/theme";
 
-export default function MissionRow({
+function MissionRow({
   quest,
   current,
   target,
@@ -43,6 +43,7 @@ export default function MissionRow({
   return (
     <>
       <div
+        className="tracker-mission-row"
         style={{
           padding: `${fs(11, 18)} ${fs(8, 16)}`,
           borderTop: first ? "none" : `1px solid ${fnt.borderSoft}`,
@@ -193,3 +194,5 @@ export default function MissionRow({
     </>
   );
 }
+
+export default memo(MissionRow);

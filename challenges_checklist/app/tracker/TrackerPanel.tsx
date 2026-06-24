@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import FortniteIcon from "../components/FortniteIcon";
@@ -8,19 +8,20 @@ import AdminBulkMenu from "../components/AdminBulkMenu";
 import { getMissionVisual } from "../lib/missionAssets";
 import LogoutButton from "../components/LogoutButton";
 import MissionRow from "../components/MissionRow";
-import BattlePassBanner from "../components/BattlePassBanner";
+import MissionProgressSlider from "../components/MissionProgressSlider";
 import PageBackground from "../components/PageBackground";
 import SearchBox from "../components/SearchBox";
 import IncompleteOnlyToggle from "../components/IncompleteOnlyToggle";
 import PrestigeViewToggle from "../components/PrestigeViewToggle";
 import WeekTabs from "../components/WeekTabs";
+import TrackerWeekAccordion from "./TrackerWeekAccordion";
 import TopNav from "../components/TopNav";
 import TrackerLogsPanel from "../components/TrackerLogsPanel";
 import {
   TrackerLocalResultFeed,
   TrackerMiniLogFeed,
 } from "../components/TrackerMiniLogFeed";
-import { contentWrap, fnt, fs, pageMain, panel, pillTab, titleFont, weekAccent, yellowButton } from "../lib/theme";
+import { contentWrap, fnt, fs, pageBackground, pageMain, panel, pillTab, titleFont, weekAccent, yellowButton } from "../lib/theme";
 import {
   globalSection,
   logTrackerActivity,
@@ -35,7 +36,6 @@ import { specialLandKind } from "../lib/specialMissions";
 import type { Season, Week } from "../lib/selection";
 import {
   ACTION_EMOJI,
-  CHALLENGE_SELECT,
   computeLockedIds,
   normalizeText,
   sortWeekChallenges,
@@ -46,19 +46,29 @@ import {
   type Named,
   type Rule,
 } from "../lib/types";
-import { isPanelMiscChallenge } from "../lib/trackerUtils";
+import { isPanelMiscChallenge, normalizeSearchObjectFields } from "../lib/trackerUtils";
+import {
+  buildDistinctProgressIndex,
+  buildRuleProgressIndex,
+  debounce,
+  fetchFullChallenges,
+  fetchProgressOnly,
+  patchChallengeRow,
+  patchChallengesFromReport,
+  patchDistinctRow,
+  patchRuleProgressRow,
+  ruleProgressHit,
+  type DistinctRow,
+  type RuleProgressRow,
+} from "../lib/trackerSync";
+import { useTrackerLiteMode } from "../lib/trackerLite";
 
 // fila de match_rule_progress para marcar qué parte de un desafío
 // multi-opción ya está registrada
-type RuleProgressRow = { challenge_rule_id: string; match_id: string | null };
+// (tipos en trackerSync.ts)
 
 // fila de challenge_distinct_progress: lugares ya contados por un desafío
 // de "lugares con nombre diferentes"
-type DistinctRow = {
-  challenge_id: string;
-  location_id: string;
-  match_id: string | null;
-};
 
 // consumible con efecto: usarlo (trigger) dispara un evento sintético
 // (effect) con su valor por unidad (manzana → gain 5 de vida)
@@ -216,6 +226,12 @@ function deriveCategoryView(
 
   const byLabel = (a: { label: string }, b: { label: string }) =>
     a.label.localeCompare(b.label);
+
+  if (cat.actionCode === "search") {
+    for (const [k, v] of used) target.set(k, v);
+    used.clear();
+  }
+
   return {
     usedOptions: [...used.values()].sort(byLabel),
     targetOptions: [...target.values()].sort(byLabel),
@@ -342,7 +358,7 @@ export default function TrackerPanel({
   seasons,
   weeks,
   seasonCode,
-  initialWeekNumber,
+  initialWeekNumber: _initialWeekNumber,
   initialChallenges,
   actionTypes,
   locations,
@@ -353,6 +369,7 @@ export default function TrackerPanel({
   isAdmin,
   userId,
   actorName,
+  initialLite = false,
 }: {
   seasons: Season[];
   weeks: Week[];
@@ -369,7 +386,9 @@ export default function TrackerPanel({
   isAdmin: boolean;
   userId: string;
   actorName: string;
+  initialLite?: boolean;
 }) {
+  const { lite, toggleLite } = useTrackerLiteMode(initialLite);
   const supabase = createClient();
   const router = useRouter();
 
@@ -380,7 +399,12 @@ export default function TrackerPanel({
     initialDistinctProgress
   );
   const [activeMatch, setActiveMatch] = useState<Match | null>(initialActiveMatch);
-  const [weekTab, setWeekTab] = useState<number>(initialWeekNumber);
+  const [selectedWeekNumbers, setSelectedWeekNumbers] = useState<Set<number>>(
+    () => new Set()
+  );
+  const [expandedWeekIds, setExpandedWeekIds] = useState<Set<string>>(
+    () => new Set()
+  );
   const [selections, setSelections] = useState<Record<string, Selection>>({});
   const [results, setResults] = useState<Record<string, ReportResult>>({});
   const [busyAction, setBusyAction] = useState<string | null>(null);
@@ -390,7 +414,6 @@ export default function TrackerPanel({
   const [cannonArrivalByChallenge, setCannonArrivalByChallenge] = useState<
     Record<string, string>
   >({});
-  const [showAll, setShowAll] = useState(false);
   const [search, setSearch] = useState("");
   const [onlyIncomplete, setOnlyIncomplete] = useState(false);
   // vista de prestigio en el panel por semana (no mezclar con los normales)
@@ -487,27 +510,94 @@ export default function TrackerPanel({
   }
 
   const weekIds = useMemo(() => weeks.map((w) => w.id), [weeks]);
+  const weekIdSet = useMemo(() => new Set(weekIds), [weekIds]);
 
-  async function loadChallenges() {
+  const selectedWeekIdSet = useMemo(() => {
+    return new Set(
+      weeks
+        .filter((w) => selectedWeekNumbers.has(w.week_number))
+        .map((w) => w.id)
+    );
+  }, [weeks, selectedWeekNumbers]);
+
+  const hasWeekFilter = selectedWeekNumbers.size > 0;
+
+  useEffect(() => {
+    setSelectedWeekNumbers(new Set());
+  }, [seasonCode]);
+
+  const toggleWeekSelection = useCallback((weekNumber: number) => {
+    setSelectedWeekNumbers((prev) => {
+      const next = new Set(prev);
+      if (next.has(weekNumber)) next.delete(weekNumber);
+      else next.add(weekNumber);
+      return next;
+    });
+  }, []);
+
+  const selectAllWeeks = useCallback(() => {
+    setSelectedWeekNumbers(new Set(weeks.map((w) => w.week_number)));
+  }, [weeks]);
+
+  const selectNoWeeks = useCallback(() => {
+    setSelectedWeekNumbers(new Set());
+  }, []);
+
+  const toggleWeekExpanded = useCallback((weekId: string) => {
+    setExpandedWeekIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(weekId)) next.delete(weekId);
+      else next.add(weekId);
+      return next;
+    });
+  }, []);
+
+  useEffect(() => {
+    const validIds = new Set(
+      weeks
+        .filter((w) => selectedWeekNumbers.has(w.week_number))
+        .map((w) => w.id)
+    );
+    setExpandedWeekIds((prev) => {
+      const next = new Set([...prev].filter((id) => validIds.has(id)));
+      return next.size === prev.size ? prev : next;
+    });
+  }, [weeks, selectedWeekNumbers]);
+  const activeMatchRef = useRef(initialActiveMatch);
+  activeMatchRef.current = activeMatch;
+
+  const loadProgress = useCallback(async () => {
+    const bundle = await fetchProgressOnly(
+      supabase,
+      activeMatchRef.current?.id ?? null
+    );
+    setRuleProgress(bundle.ruleProgress);
+    setDistinctProgress(bundle.distinctProgress);
+  }, [supabase]);
+
+  const loadFullChallenges = useCallback(async () => {
     if (!weekIds.length) return;
-    const [challengesRes, progressRes, distinctRes] = await Promise.all([
-      supabase
-        .from("challenges")
-        .select(CHALLENGE_SELECT)
-        .in("week_id", weekIds)
-        .order("created_at", { ascending: true }),
-      supabase.from("match_rule_progress").select("challenge_rule_id, match_id"),
-      supabase
-        .from("challenge_distinct_progress")
-        .select("challenge_id, location_id, match_id"),
-    ]);
-    if (!challengesRes.error && challengesRes.data)
-      setChallenges(challengesRes.data as unknown as Challenge[]);
-    if (!progressRes.error && progressRes.data)
-      setRuleProgress(progressRes.data as RuleProgressRow[]);
-    if (!distinctRes.error && distinctRes.data)
-      setDistinctProgress(distinctRes.data as DistinctRow[]);
-  }
+    try {
+      const data = await fetchFullChallenges(supabase, weekIds);
+      setChallenges(data);
+      await loadProgress();
+    } catch {
+      /* ignore */
+    }
+  }, [supabase, weekIds, loadProgress]);
+
+  const debouncedFullLoadRef = useRef(
+    debounce(() => {
+      void loadFullChallenges();
+    }, 220)
+  );
+
+  useEffect(() => {
+    debouncedFullLoadRef.current = debounce(() => {
+      void loadFullChallenges();
+    }, 220);
+    return () => debouncedFullLoadRef.current.cancel();
+  }, [loadFullChallenges]);
 
   async function loadMatch() {
     const { data } = await supabase
@@ -515,7 +605,10 @@ export default function TrackerPanel({
       .select("*")
       .eq("is_active", true)
       .maybeSingle();
-    setActiveMatch((data as Match) ?? null);
+    const next = (data as Match) ?? null;
+    setActiveMatch(next);
+    activeMatchRef.current = next;
+    await loadProgress();
   }
 
   useEffect(() => {
@@ -524,12 +617,55 @@ export default function TrackerPanel({
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "challenges" },
-        () => loadChallenges()
+        (payload) => {
+          const eventType = payload.eventType as "INSERT" | "UPDATE" | "DELETE";
+          const row = (eventType === "DELETE" ? payload.old : payload.new) as
+            | (Partial<Challenge> & { id: string })
+            | undefined;
+          if (!row?.id) return;
+          if (eventType === "INSERT") {
+            debouncedFullLoadRef.current();
+            return;
+          }
+          setChallenges((prev) =>
+            patchChallengeRow(prev, eventType, row, weekIdSet)
+          );
+        }
       )
       .on(
         "postgres_changes",
         { event: "*", schema: "public", table: "matches" },
-        () => loadMatch()
+        () => {
+          void loadMatch();
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "match_rule_progress" },
+        (payload) => {
+          const eventType = payload.eventType;
+          const row = (eventType === "DELETE" ? payload.old : payload.new) as
+            | (RuleProgressRow & { id?: string })
+            | undefined;
+          if (!row?.challenge_rule_id) return;
+          setRuleProgress((prev) =>
+            patchRuleProgressRow(prev, eventType, row)
+          );
+        }
+      )
+      .on(
+        "postgres_changes",
+        { event: "*", schema: "public", table: "challenge_distinct_progress" },
+        (payload) => {
+          const eventType = payload.eventType;
+          const row = (eventType === "DELETE" ? payload.old : payload.new) as
+            | DistinctRow
+            | undefined;
+          if (!row?.challenge_id) return;
+          setDistinctProgress((prev) =>
+            patchDistinctRow(prev, eventType, row)
+          );
+        }
       )
       .subscribe();
 
@@ -540,6 +676,7 @@ export default function TrackerPanel({
   }, [weekIds.join(",")]);
 
   useEffect(() => {
+    if (trackerView !== "logs") return;
     const channel = supabase
       .channel("tracker-activity")
       .on(
@@ -552,9 +689,21 @@ export default function TrackerPanel({
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId]);
+  }, [userId, trackerView]);
 
   const lockedIds = useMemo(() => computeLockedIds(challenges), [challenges]);
+
+  const ruleProgressIndex = useMemo(
+    () => buildRuleProgressIndex(ruleProgress),
+    [ruleProgress]
+  );
+
+  const distinctProgressIndex = useMemo(
+    () => buildDistinctProgressIndex(distinctProgress),
+    [distinctProgress]
+  );
+
+  const deferredSearch = useDeferredValue(search);
 
   // Prestigio bloqueado: ids de desafíos de prestigio cuya semana aún tiene
   // desafíos normales sin completar. No se pueden avanzar (el motor lo bloquea)
@@ -598,12 +747,15 @@ export default function TrackerPanel({
           !c.is_completed &&
           !c.is_meta &&
           !lockedIds.has(c.id) &&
-          !prestigeLockedIds.has(c.id)
+          !prestigeLockedIds.has(c.id) &&
+          hasWeekFilter &&
+          !!c.week_id &&
+          selectedWeekIdSet.has(c.week_id)
       ),
-    [challenges, lockedIds, prestigeLockedIds]
+    [challenges, lockedIds, prestigeLockedIds, hasWeekFilter, selectedWeekIdSet]
   );
 
-  // Categorías del panel global: reglas pendientes de TODA la temporada,
+  // Categorías del panel global: reglas pendientes de las semanas seleccionadas,
   // aplanadas para el filtrado cruzado. Cuando un desafío se completa, sus
   // opciones y condiciones desaparecen solas.
   const categories = useMemo<Category[]>(() => {
@@ -636,7 +788,10 @@ export default function TrackerPanel({
         c.is_completed ||
         c.is_meta ||
         lockedIds.has(c.id) ||
-        prestigeLockedIds.has(c.id)
+        prestigeLockedIds.has(c.id) ||
+        !hasWeekFilter ||
+        !c.week_id ||
+        !selectedWeekIdSet.has(c.week_id)
       )
         continue;
       const totalRules = c.challenge_rules?.length ?? 0;
@@ -662,8 +817,10 @@ export default function TrackerPanel({
           c.rules_operator === "and" &&
           totalRules > 1
         ) {
-          satisfied = ruleProgress.some(
-            (p) => p.challenge_rule_id === r.id && p.match_id === null
+          satisfied = ruleProgressHit(
+            ruleProgressIndex,
+            r.id,
+            (p) => p.match_id === null
           );
         } else if (
           (c.match_scope === "same_match" && totalRules > 1) ||
@@ -671,9 +828,10 @@ export default function TrackerPanel({
         ) {
           satisfied =
             !!activeMatch &&
-            ruleProgress.some(
-              (p) =>
-                p.challenge_rule_id === r.id && p.match_id === activeMatch.id
+            ruleProgressHit(
+              ruleProgressIndex,
+              r.id,
+              (p) => p.match_id === activeMatch.id
             );
         }
         if (satisfied) continue;
@@ -720,11 +878,17 @@ export default function TrackerPanel({
             : null;
 
         const distinct = c.unit === "distinct_location";
-        acc.rules.push({
+        const ruleFields = normalizeSearchObjectFields(code, {
           usedKey: usedOption?.key ?? null,
           usedOption,
           targetKey: targetOption?.key ?? null,
           targetOption,
+        });
+        acc.rules.push({
+          usedKey: ruleFields.usedKey,
+          usedOption: ruleFields.usedOption as Option | null,
+          targetKey: ruleFields.targetKey,
+          targetOption: ruleFields.targetOption as Option | null,
           locId: r.location?.id ?? null,
           locLabel: r.location?.display_name ?? null,
           conds: r.rule_conditions.map((rc) => ({
@@ -735,13 +899,11 @@ export default function TrackerPanel({
           distinct,
           distinctVisited: distinct
             ? new Set(
-                distinctProgress
-                  .filter(
-                    (d) =>
-                      d.challenge_id === c.id &&
-                      (c.match_scope === "same_match"
-                        ? d.match_id === (activeMatch?.id ?? "__none__")
-                        : d.match_id === null)
+                (distinctProgressIndex.get(c.id) ?? [])
+                  .filter((d) =>
+                    c.match_scope === "same_match"
+                      ? d.match_id === (activeMatch?.id ?? "__none__")
+                      : d.match_id === null
                   )
                   .map((d) => d.location_id)
               )
@@ -774,9 +936,11 @@ export default function TrackerPanel({
     prestigeLockedIds,
     actionTypes,
     effects,
-    ruleProgress,
-    distinctProgress,
+    ruleProgressIndex,
+    distinctProgressIndex,
     activeMatch,
+    hasWeekFilter,
+    selectedWeekIdSet,
   ]);
 
   function getSelection(action: string): Selection {
@@ -806,7 +970,10 @@ export default function TrackerPanel({
       tag: key?.startsWith("tag:") ? key.slice(4) : null,
     });
     const used = parse(sel.used);
-    const target = parse(sel.target);
+    let target = parse(sel.target);
+    if (cat.actionCode === "search" && !target.obj && !target.tag) {
+      if (used.obj || used.tag) target = { ...used };
+    }
 
     // cantidad: vacía = 1 evento; con 0 o negativa no registra nada; en
     // desafíos de cantidad (vida, daño, materiales…) es obligatoria
@@ -865,6 +1032,10 @@ export default function TrackerPanel({
         : ((data ?? {}) as ReportResult),
     }));
     if (!error) {
+      const res = (data ?? {}) as ReportResult;
+      if (res.updated?.length) {
+        setChallenges((prev) => patchChallengesFromReport(prev, res.updated!));
+      }
       await emitLog(
         globalSection(cat.actionCode),
         cat.actionCode,
@@ -873,7 +1044,6 @@ export default function TrackerPanel({
           action: buildRegisterActionContext(cat, sel, view, amount),
         }
       );
-      loadChallenges();
     }
   }
 
@@ -888,7 +1058,6 @@ export default function TrackerPanel({
         action: { actionName: "Partida", conditions: ["Iniciar"] },
       });
     loadMatch();
-    loadChallenges();
   }
 
   async function endMatch() {
@@ -902,7 +1071,6 @@ export default function TrackerPanel({
         action: { actionName: "Partida", conditions: ["Terminar"] },
       });
     loadMatch();
-    loadChallenges();
   }
 
   /** Victoria: aplica win_match a lo pendiente y cierra la partida. */
@@ -930,11 +1098,14 @@ export default function TrackerPanel({
         conditions: ["Ganar partida"],
       },
     });
+    const winRes = data as ReportResult;
+    if (winRes?.updated?.length) {
+      setChallenges((prev) => patchChallengesFromReport(prev, winRes.updated!));
+    }
     const { error: endErr } = await supabase.rpc("end_active_match");
     setBusyMatch(false);
     if (endErr) alert(endErr.message);
     loadMatch();
-    loadChallenges();
   }
 
   // ---- controles manuales (antes en la checklist pública) ----
@@ -966,7 +1137,6 @@ export default function TrackerPanel({
         },
       });
     }
-    loadChallenges();
   }
 
   // "descompletar / quitar progreso": pone 0 y limpia acumuladores;
@@ -994,7 +1164,6 @@ export default function TrackerPanel({
         },
       });
     }
-    loadChallenges();
   }
 
   // ---- desafíos multi-opción: un botón por objetivo/objeto/lugar ----
@@ -1026,18 +1195,24 @@ export default function TrackerPanel({
     if (c.match_scope === "same_match") {
       return (
         !!activeMatch &&
-        ruleProgress.some(
-          (p) => p.challenge_rule_id === ruleId && p.match_id === activeMatch.id
+        ruleProgressHit(
+          ruleProgressIndex,
+          ruleId,
+          (p) => p.match_id === activeMatch.id
         )
       );
     }
     if (c.match_scope === "different_matches") {
-      return ruleProgress.some(
-        (p) => p.challenge_rule_id === ruleId && p.match_id !== null
+      return ruleProgressHit(
+        ruleProgressIndex,
+        ruleId,
+        (p) => p.match_id !== null
       );
     }
-    return ruleProgress.some(
-      (p) => p.challenge_rule_id === ruleId && p.match_id === null
+    return ruleProgressHit(
+      ruleProgressIndex,
+      ruleId,
+      (p) => p.match_id === null
     );
   }
 
@@ -1088,8 +1263,10 @@ export default function TrackerPanel({
           action: ruleActionContext(r),
         }
       );
+      if (res?.updated?.length) {
+        setChallenges((prev) => patchChallengesFromReport(prev, res.updated!));
+      }
     }
-    loadChallenges();
   }
 
   // despresionar una opción ya registrada: quita ese registro y recalcula
@@ -1111,7 +1288,6 @@ export default function TrackerPanel({
         }
       );
     }
-    loadChallenges();
   }
 
   async function increaseProgress(challenge: Challenge, amount: number) {
@@ -1131,7 +1307,6 @@ export default function TrackerPanel({
         },
       });
     }
-    loadChallenges();
   }
 
   async function setProgress(challenge: Challenge, newValue: number) {
@@ -1151,50 +1326,77 @@ export default function TrackerPanel({
         },
       });
     }
-    loadChallenges();
   }
 
   // ---- vista por semana (overview) ----
-  const tabWeek = weeks.find((w) => w.week_number === weekTab) ?? weeks[0];
-  const viewWeeks = showAll ? weeks : tabWeek ? [tabWeek] : [];
-  const query = normalizeText(search.trim());
+  const viewWeeks = useMemo(
+    () => weeks.filter((w) => selectedWeekNumbers.has(w.week_number)),
+    [weeks, selectedWeekNumbers]
+  );
+  const query = normalizeText(deferredSearch.trim());
 
-  // en el panel se ven TODAS las fases (las bloqueadas con candado), siempre
-  // en orden ascendente y sin moverse de sitio al completarse
-  function weekItems(week: Week) {
-    return sortWeekChallenges(
-      challenges.filter(
-        (c) => c.week_id === week.id && !c.is_meta && !!c.is_prestige === prestigeView
-      )
-    ).filter(
-      (c) =>
-        (!onlyIncomplete || !c.is_completed) &&
-        (!query || normalizeText(c.description).includes(query))
-    );
-  }
+  const searchPlaceholder = !hasWeekFilter
+    ? "Selecciona semanas arriba para buscar…"
+    : selectedWeekNumbers.size === 1
+      ? `Buscar en la semana ${[...selectedWeekNumbers][0]}…`
+      : "Buscar en las semanas seleccionadas…";
 
-  function weekMetaOf(week: Week) {
-    const meta = challenges.find((c) => c.week_id === week.id && c.is_meta);
-    if (!meta) return null;
-    if (onlyIncomplete && meta.is_completed) return null;
-    if (query && !normalizeText(meta.description).includes(query)) return null;
-    return meta;
-  }
+  const categoryViews = useMemo(() => {
+    const map = new Map<string, CategoryView>();
+    for (const cat of categories) {
+      map.set(
+        cat.actionCode,
+        deriveCategoryView(cat, getSelection(cat.actionCode), namedLocations)
+      );
+    }
+    return map;
+  }, [categories, selections, namedLocations]);
 
-  // % de la semana: normales llenan 0–100% y los prestigios suben a 100–200%
-  function weekStats(week: Week) {
-    const normals = challenges.filter(
-      (c) => c.week_id === week.id && !c.is_meta && !c.is_prestige
-    );
-    const prest = challenges.filter(
-      (c) => c.week_id === week.id && !c.is_meta && c.is_prestige
-    );
-    const nDone = normals.filter((c) => c.is_completed).length;
-    const pDone = prest.filter((c) => c.is_completed).length;
-    const nPct = normals.length ? (nDone / normals.length) * 100 : 0;
-    const pPct = prest.length ? (pDone / prest.length) * 100 : 0;
-    return nPct + pPct;
-  }
+  const weekPanels = useMemo(() => {
+    return viewWeeks.map((week) => {
+      const items = sortWeekChallenges(
+        challenges.filter(
+          (c) =>
+            c.week_id === week.id && !c.is_meta && !!c.is_prestige === prestigeView
+        )
+      ).filter(
+        (c) =>
+          (!onlyIncomplete || !c.is_completed) &&
+          (!query || normalizeText(c.description).includes(query))
+      );
+      const meta = prestigeView
+        ? null
+        : challenges.find((c) => c.week_id === week.id && c.is_meta);
+      const metaFiltered =
+        meta &&
+        (!onlyIncomplete || !meta.is_completed) &&
+        (!query || normalizeText(meta.description).includes(query))
+          ? meta
+          : null;
+      const normals = challenges.filter(
+        (c) => c.week_id === week.id && !c.is_meta && !c.is_prestige
+      );
+      const prest = challenges.filter(
+        (c) => c.week_id === week.id && !c.is_meta && c.is_prestige
+      );
+      const nDone = normals.filter((c) => c.is_completed).length;
+      const pDone = prest.filter((c) => c.is_completed).length;
+      const nPct = normals.length ? (nDone / normals.length) * 100 : 0;
+      const pPct = prest.length ? (pDone / prest.length) * 100 : 0;
+      return {
+        week,
+        items,
+        meta: metaFiltered,
+        percent: nPct + pPct,
+      };
+    });
+  }, [
+    viewWeeks,
+    challenges,
+    prestigeView,
+    onlyIncomplete,
+    query,
+  ]);
 
 
   // ---- estilos ----
@@ -1204,8 +1406,12 @@ export default function TrackerPanel({
     borderRadius: 12,
     padding: 18,
     color: "white",
-    backdropFilter: "blur(2px)",
-    WebkitBackdropFilter: "blur(2px)",
+    ...(lite
+      ? {}
+      : {
+          backdropFilter: "blur(2px)",
+          WebkitBackdropFilter: "blur(2px)",
+        }),
   };
   const button: React.CSSProperties = {
     ...yellowButton,
@@ -1326,10 +1532,19 @@ export default function TrackerPanel({
 
   return (
     <main style={pageMain}>
-      <PageBackground />
+      {lite ? (
+        <div
+          className="fn-bg"
+          aria-hidden
+          style={{ background: pageBackground, position: "fixed", inset: 0, zIndex: -1 }}
+        />
+      ) : (
+        <PageBackground />
+      )}
       <div style={contentWrap}>
       <TopNav
         sticky
+        solidSurface={lite}
         tabs={navTabs}
         right={
           <>
@@ -1337,7 +1552,7 @@ export default function TrackerPanel({
               <AdminBulkMenu
                 onDone={() => {
                   loadMatch();
-                  loadChallenges();
+                  void loadFullChallenges();
                   setRemoteLogs({});
                   window.dispatchEvent(new Event("tracker-logs-cleared"));
                 }}
@@ -1380,7 +1595,7 @@ export default function TrackerPanel({
             Panel de supervisión
           </h1>
           <span style={{ color: fnt.textDim, fontSize: fs(13, 20) }}>
-            Registro global de eventos · toda la temporada
+            Registro de eventos · filtra por semanas seleccionadas
           </span>
         </div>
         <div style={{ marginLeft: "auto", display: "flex", gap: 8, flexWrap: "wrap" }}>
@@ -1398,8 +1613,32 @@ export default function TrackerPanel({
           >
             Registro
           </button>
+          <button
+            type="button"
+            style={pillTab(lite)}
+            onClick={toggleLite}
+            title="Menos animaciones y sin blur (recomendado con el directo abierto)"
+          >
+            {lite ? "Modo ligero" : "Modo completo"}
+          </button>
         </div>
       </header>
+
+      {trackerView === "track" && (
+        <div style={{ marginBottom: 20 }}>
+          <WeekTabs
+            multiSelect
+            seasons={seasons}
+            weeks={weeks}
+            seasonCode={seasonCode}
+            selectedWeeks={[...selectedWeekNumbers]}
+            onToggleWeek={toggleWeekSelection}
+            onSelectAllWeeks={selectAllWeeks}
+            onSelectNoneWeeks={selectNoWeeks}
+            onSelectSeason={(code) => router.push(`/tracker?season=${code}`)}
+          />
+        </div>
+      )}
 
       {trackerView === "logs" && (
         <TrackerLogsPanel actionTypes={actionTypes} />
@@ -1427,7 +1666,7 @@ export default function TrackerPanel({
         {categories.map((cat) => {
           const sel = getSelection(cat.actionCode);
           const res = results[cat.actionCode];
-          const view = deriveCategoryView(cat, sel, namedLocations);
+          const view = categoryViews.get(cat.actionCode)!;
           return (
             <section
               key={cat.actionCode}
@@ -1530,7 +1769,7 @@ export default function TrackerPanel({
               ) : (
               <>
 
-              {view.usedOptions.length > 0 && (
+              {view.usedOptions.length > 0 && cat.actionCode !== "search" && (
                 <div style={{ display: "grid", gap: 8 }}>
                   <span style={groupLabel}>Arma / objeto usado</span>
                   {chipSections([
@@ -1552,7 +1791,9 @@ export default function TrackerPanel({
 
               {view.targetOptions.length > 0 && (
                 <div style={{ display: "grid", gap: 8 }}>
-                  <span style={groupLabel}>Objetivo</span>
+                  <span style={groupLabel}>
+                    {cat.actionCode === "search" ? "Contenedor" : "Objetivo"}
+                  </span>
                   {chipSections([
                     {
                       label: "Genéricos (tipo)",
@@ -1688,7 +1929,11 @@ export default function TrackerPanel({
         })}
         {categories.length === 0 && (
           <section style={card}>
-            <p style={{ margin: 0 }}>No quedan desafíos pendientes 🎉</p>
+            <p style={{ margin: 0 }}>
+              {!hasWeekFilter
+                ? "Selecciona una o más semanas arriba para ver las acciones rápidas."
+                : "No quedan desafíos pendientes en las semanas seleccionadas 🎉"}
+            </p>
           </section>
         )}
       </div>
@@ -1700,25 +1945,6 @@ export default function TrackerPanel({
         </div>
       )}
       <section style={{ display: "grid", gap: 14 }}>
-        <WeekTabs
-          seasons={seasons}
-          weeks={weeks}
-          seasonCode={seasonCode}
-          weekNumber={weekTab}
-          allSelected={showAll}
-          onSelectAll={() => setShowAll(true)}
-          onSelectSeason={(code) => router.push(`/tracker?season=${code}&week=1`)}
-          onSelectWeek={(n) => {
-            setShowAll(false);
-            setWeekTab(n);
-            window.history.replaceState(
-              null,
-              "",
-              `/tracker?season=${seasonCode}&week=${n}`
-            );
-          }}
-        />
-
         <div
           style={{
             display: "flex",
@@ -1731,11 +1957,7 @@ export default function TrackerPanel({
             <SearchBox
               value={search}
               onChange={setSearch}
-              placeholder={
-                showAll
-                  ? "Buscar en todas las semanas…"
-                  : `Buscar en la semana ${tabWeek?.week_number ?? ""}…`
-              }
+              placeholder={searchPlaceholder}
             />
           </div>
           <PrestigeViewToggle
@@ -1748,32 +1970,28 @@ export default function TrackerPanel({
           />
         </div>
 
-        {viewWeeks.map((week) => {
-          const items = weekItems(week);
-          const weekMeta = prestigeView ? null : weekMetaOf(week);
-          if (showAll && items.length === 0 && !weekMeta) return null;
+        {!hasWeekFilter && (
+          <p style={{ color: "#9fc9f5", margin: 0 }}>
+            Selecciona semanas arriba para ver los desafíos.
+          </p>
+        )}
+
+        {weekPanels.map(({ week, items, meta: weekMeta, percent }) => {
+          if (items.length === 0 && !weekMeta) return null;
 
           const accent = weekAccent(week.week_number);
+          const expanded = expandedWeekIds.has(week.id);
           return (
-        <div
+        <TrackerWeekAccordion
           key={week.id}
-          style={{
-            borderRadius: 12,
-            overflow: "hidden",
-            border: `1px solid ${accent}59`,
-            boxShadow: "0 8px 26px rgba(0,0,0,0.32)",
-          }}
+          expanded={expanded}
+          onToggle={() => toggleWeekExpanded(week.id)}
+          label="Desafíos del pase de batalla"
+          title={week.display_name ?? `Semana ${week.week_number}`}
+          subtitle="Completa los objetivos para avanzar"
+          percent={percent}
+          accent={accent}
         >
-          <BattlePassBanner
-            label="Desafíos del pase de batalla"
-            title={week.display_name ?? `Semana ${week.week_number}`}
-            subtitle="Completa los objetivos para avanzar"
-            percent={weekStats(week)}
-            accent={accent}
-            flush
-          />
-
-          <div style={{ ...panel, borderRadius: 0, border: "none", padding: `${fs(6, 12)} ${fs(8, 18)}` }}>
           {weekMeta && (
             <MissionRow
               quest={weekMeta.description}
@@ -1818,10 +2036,10 @@ export default function TrackerPanel({
             const addedThisMatch =
               !!activeMatch &&
               (c.challenge_rules ?? []).some((r) =>
-                ruleProgress.some(
-                  (p) =>
-                    p.challenge_rule_id === r.id &&
-                    p.match_id === activeMatch.id
+                ruleProgressHit(
+                  ruleProgressIndex,
+                  r.id,
+                  (p) => p.match_id === activeMatch.id
                 )
               );
 
@@ -2018,38 +2236,13 @@ export default function TrackerPanel({
                 ) : (
                   <div style={{ display: "grid", gap: 8 }}>
                     {ctrl.showSlider && (
-                    <input
-                      type="range"
-                      min={0}
-                      max={target}
-                      disabled={locked}
-                      value={current}
-                      onChange={(e) => {
-                        const newValue = Number(e.target.value);
-                        setChallenges((prev) =>
-                          prev.map((ch) =>
-                            ch.id === c.id
-                              ? {
-                                  ...ch,
-                                  current_value: newValue,
-                                  is_completed:
-                                    target > 0 && newValue >= target,
-                                }
-                              : ch
-                          )
-                        );
-                      }}
-                      onMouseUp={(e) =>
-                        setProgress(c, Number(e.currentTarget.value))
-                      }
-                      onTouchEnd={(e) =>
-                        setProgress(c, Number(e.currentTarget.value))
-                      }
-                      style={{
-                        width: "100%",
-                        height: fs(8, 14),
-                        accentColor: c.is_completed ? "#22c55e" : "#3b82f6",
-                      }}
+                    <MissionProgressSlider
+                      challengeId={c.id}
+                      current={current}
+                      target={target}
+                      locked={locked}
+                      accent={c.is_completed ? "#22c55e" : "#3b82f6"}
+                      onCommit={(v) => setProgress(c, v)}
                     />
                     )}
                     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -2216,14 +2409,14 @@ export default function TrackerPanel({
                 : "No hay desafíos para mostrar."}
             </p>
           )}
-          </div>
-        </div>
+        </TrackerWeekAccordion>
           );
         })}
 
-        {(query || onlyIncomplete) &&
-          viewWeeks.every(
-            (w) => weekItems(w).length === 0 && !weekMetaOf(w)
+        {hasWeekFilter &&
+          (query || onlyIncomplete) &&
+          weekPanels.every(
+            (p) => p.items.length === 0 && !p.meta
           ) && (
             <p style={{ color: "#9fc9f5", margin: 0 }}>
               {query

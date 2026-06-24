@@ -1,3 +1,4 @@
+import { fetchProgressOnly } from "@/app/lib/trackerSync";
 import { createClient } from "@/utils/supabase/server";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
@@ -20,6 +21,12 @@ export default async function TrackerPage({
   if (!user) redirect("/login");
 
   const params = await searchParams;
+  const liteParam = params.lite;
+  const initialLite =
+    liteParam === "1" ||
+    liteParam === "true" ||
+    (Array.isArray(liteParam) && (liteParam[0] === "1" || liteParam[0] === "true"));
+
   const { seasons, season, weeks, week } = await getSeasonWeekSelection(
     supabase,
     params
@@ -27,14 +34,20 @@ export default async function TrackerPage({
 
   const weekIds = weeks.map((w) => w.id);
 
+  const { data: activeMatch } = await supabase
+    .from("matches")
+    .select("*")
+    .eq("is_active", true)
+    .maybeSingle();
+
+  const activeMatchId = activeMatch?.id ?? null;
+
   const [
     challenges,
     lines,
     actionTypes,
     locations,
-    activeMatch,
-    ruleProgress,
-    distinctProgress,
+    progressBundle,
     effects,
     adminRow,
   ] = await Promise.all([
@@ -48,13 +61,7 @@ export default async function TrackerPage({
     supabase.from("challenge_lines").select("*"),
     supabase.from("action_types").select("*").order("display_name"),
     supabase.from("locations").select("*").order("display_name"),
-    supabase.from("matches").select("*").eq("is_active", true).maybeSingle(),
-    supabase
-      .from("match_rule_progress")
-      .select("challenge_rule_id, match_id"),
-    supabase
-      .from("challenge_distinct_progress")
-      .select("challenge_id, location_id, match_id"),
+    fetchProgressOnly(supabase, activeMatchId),
     supabase
       .from("object_effects")
       .select(
@@ -77,15 +84,16 @@ export default async function TrackerPage({
       lines={lines.data ?? []}
       actionTypes={actionTypes.data ?? []}
       locations={locations.data ?? []}
-      initialActiveMatch={activeMatch.data ?? null}
-      initialRuleProgress={ruleProgress.data ?? []}
-      initialDistinctProgress={distinctProgress.data ?? []}
+      initialActiveMatch={activeMatch ?? null}
+      initialRuleProgress={progressBundle.ruleProgress}
+      initialDistinctProgress={progressBundle.distinctProgress}
       effects={(effects.data ?? []) as never[]}
       isAdmin={!!adminRow.data}
       userId={user.id}
       actorName={
         user.email ? user.email.split("@")[0] ?? "supervisor" : "supervisor"
       }
+      initialLite={initialLite}
     />
   );
 }

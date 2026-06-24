@@ -113,19 +113,19 @@ begin
     rules_operator = 'or'
   where id = v;
 
-  insert into challenge_rules (challenge_id, action_type_id, required_object_id, location_id)
+  insert into challenge_rules (challenge_id, action_type_id, target_object_id, location_id)
   select v, (select id from action_types where code = 'search'),
          (select id from game_objects where code = 'chest'),
          (select id from locations where code = 'the_block');
-  insert into challenge_rules (challenge_id, action_type_id, required_object_id, location_id)
+  insert into challenge_rules (challenge_id, action_type_id, target_object_id, location_id)
   select v, (select id from action_types where code = 'search'),
          (select id from game_objects where code = 'ammo_box'),
          (select id from locations where code = 'the_block');
-  insert into challenge_rules (challenge_id, action_type_id, required_object_id, location_id)
+  insert into challenge_rules (challenge_id, action_type_id, target_object_id, location_id)
   select v, (select id from action_types where code = 'search'),
          (select id from game_objects where code = 'chest'),
          (select id from locations where code = 'block_hotel');
-  insert into challenge_rules (challenge_id, action_type_id, required_object_id, location_id)
+  insert into challenge_rules (challenge_id, action_type_id, target_object_id, location_id)
   select v, (select id from action_types where code = 'search'),
          (select id from game_objects where code = 'ammo_box'),
          (select id from locations where code = 'block_hotel');
@@ -157,11 +157,11 @@ begin
     rules_operator = 'or'
   where id = v;
 
-  insert into challenge_rules (challenge_id, action_type_id, required_object_id, location_id)
+  insert into challenge_rules (challenge_id, action_type_id, target_object_id, location_id)
   select v, (select id from action_types where code = 'search'),
          (select id from game_objects where code = 'chest'),
          (select id from locations where code = 'frosty_flights');
-  insert into challenge_rules (challenge_id, action_type_id, required_object_id, location_id)
+  insert into challenge_rules (challenge_id, action_type_id, target_object_id, location_id)
   select v, (select id from action_types where code = 'search'),
          (select id from game_objects where code = 'ammo_box'),
          (select id from locations where code = 'frosty_flights');
