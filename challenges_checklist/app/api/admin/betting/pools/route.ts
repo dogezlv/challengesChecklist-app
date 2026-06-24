@@ -1,8 +1,13 @@
 import { NextResponse } from "next/server";
 import { requireAdmin } from "@/app/lib/admin-auth";
 import { createServiceClient } from "@/app/lib/supabase-service";
+import { getEligibleWeeks, type WinMode } from "@/app/lib/twitch/betting-weeks";
 
-type OutcomeInput = { week_id: string; week_number: number; outcome_title: string };
+type OutcomeInput = {
+  week_id?: string | null;
+  week_number?: number | null;
+  outcome_title: string;
+};
 
 export async function POST(req: Request) {
   const auth = await requireAdmin();
@@ -12,7 +17,8 @@ export async function POST(req: Request) {
   const poolId = typeof body.pool_id === "string" ? body.pool_id : null;
   const seasonId = typeof body.season_id === "string" ? body.season_id : null;
   const title = typeof body.title === "string" ? body.title.trim() : "";
-  const winMode =
+  const poolKind = body.pool_kind === "custom" ? "custom" : "week_race";
+  const winMode: WinMode =
     body.win_mode === "normales" ? "normales" : "normales_prestigio";
   const durationSeconds = Number(body.duration_seconds) || 600;
   const outcomes = Array.isArray(body.outcomes) ? (body.outcomes as OutcomeInput[]) : [];
@@ -26,6 +32,78 @@ export async function POST(req: Request) {
 
   const service = createServiceClient();
 
+  let outcomeRows: {
+    week_id: string | null;
+    week_number: number | null;
+    outcome_title: string;
+  }[] = [];
+
+  if (poolKind === "week_race") {
+    const eligible = await getEligibleWeeks(service, seasonId, winMode);
+    if (eligible.length < 2) {
+      return NextResponse.json(
+        {
+          error: `Solo quedan ${eligible.length} semana(s) sin completar. Se necesitan al menos 2 para abrir una apuesta.`,
+        },
+        { status: 400 }
+      );
+    }
+
+    const eligibleIds = new Set(eligible.map((w) => w.id));
+    if (outcomes.length > 0) {
+      outcomeRows = outcomes
+        .filter((o) => o.week_id && eligibleIds.has(o.week_id))
+        .map((o) => ({
+          week_id: o.week_id!,
+          week_number: o.week_number ?? null,
+          outcome_title: o.outcome_title.slice(0, 25),
+        }));
+    } else {
+      outcomeRows = eligible.map((w) => ({
+        week_id: w.id,
+        week_number: w.week_number,
+        outcome_title: `Semana ${w.week_number}`,
+      }));
+    }
+
+    if (outcomeRows.length < 2) {
+      return NextResponse.json(
+        { error: "Selecciona al menos 2 semanas sin completar." },
+        { status: 400 }
+      );
+    }
+  } else {
+    outcomeRows = outcomes
+      .map((o, i) => ({
+        week_id: null,
+        week_number: i + 1,
+        outcome_title: (o.outcome_title ?? `Opción ${i + 1}`).slice(0, 25),
+      }))
+      .filter((o) => o.outcome_title.trim());
+
+    if (outcomeRows.length < 2) {
+      return NextResponse.json(
+        { error: "Añade al menos 2 opciones para la apuesta libre." },
+        { status: 400 }
+      );
+    }
+    if (outcomeRows.length > 10) {
+      return NextResponse.json({ error: "Máximo 10 opciones." }, { status: 400 });
+    }
+  }
+
+  const upsertOutcomes = async (targetPoolId: string) => {
+    await service.from("betting_pool_outcomes").delete().eq("pool_id", targetPoolId);
+    await service.from("betting_pool_outcomes").insert(
+      outcomeRows.map((o) => ({
+        pool_id: targetPoolId,
+        week_id: o.week_id,
+        week_number: o.week_number,
+        outcome_title: o.outcome_title,
+      }))
+    );
+  };
+
   if (poolId) {
     const { data: existing } = await service
       .from("betting_pools")
@@ -36,28 +114,19 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Solo pools en draft son editables" }, { status: 400 });
     }
 
-    await service.from("betting_pool_outcomes").delete().eq("pool_id", poolId);
     await service
       .from("betting_pools")
       .update({
         season_id: seasonId,
         title,
+        pool_kind: poolKind,
         win_mode: winMode,
         duration_seconds: durationSeconds,
         updated_at: new Date().toISOString(),
       })
       .eq("id", poolId);
 
-    if (outcomes.length > 0) {
-      await service.from("betting_pool_outcomes").insert(
-        outcomes.map((o) => ({
-          pool_id: poolId,
-          week_id: o.week_id,
-          week_number: o.week_number,
-          outcome_title: o.outcome_title.slice(0, 25),
-        }))
-      );
-    }
+    await upsertOutcomes(poolId);
 
     const { data: pool } = await service
       .from("betting_pools")
@@ -70,29 +139,26 @@ export async function POST(req: Request) {
 
   const { data: openPool } = await service
     .from("betting_pools")
-    .select("id")
+    .select("id, title")
     .eq("season_id", seasonId)
     .in("status", ["open", "locked", "pending_resolve"])
     .maybeSingle();
 
   if (openPool) {
     return NextResponse.json(
-      { error: "Ya hay un pool activo para esta temporada" },
+      {
+        error: `Ya hay una apuesta activa («${openPool.title}»). Cancélala o espera a que se resuelva antes de crear otra.`,
+      },
       { status: 400 }
     );
   }
-
-  const { data: weeks } = await service
-    .from("challenge_weeks")
-    .select("id, week_number")
-    .eq("season_id", seasonId)
-    .order("week_number");
 
   const { data: pool, error } = await service
     .from("betting_pools")
     .insert({
       season_id: seasonId,
       title,
+      pool_kind: poolKind,
       win_mode: winMode,
       duration_seconds: durationSeconds,
       status: "draft",
@@ -104,23 +170,7 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: error?.message ?? "Error al crear pool" }, { status: 500 });
   }
 
-  const outcomeRows =
-    outcomes.length > 0
-      ? outcomes
-      : (weeks ?? []).map((w) => ({
-          week_id: w.id,
-          week_number: w.week_number,
-          outcome_title: `Semana ${w.week_number}`,
-        }));
-
-  await service.from("betting_pool_outcomes").insert(
-    outcomeRows.map((o) => ({
-      pool_id: pool.id,
-      week_id: o.week_id,
-      week_number: o.week_number,
-      outcome_title: (o.outcome_title ?? `Semana ${o.week_number}`).slice(0, 25),
-    }))
-  );
+  await upsertOutcomes(pool.id);
 
   const { data: full } = await service
     .from("betting_pools")
