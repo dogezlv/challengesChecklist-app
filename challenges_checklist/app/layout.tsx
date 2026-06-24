@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Geist, Geist_Mono } from "next/font/google";
 import localFont from "next/font/local";
 import "./globals.css";
+import LiteModeBoot from "./components/LiteModeBoot";
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -52,7 +53,10 @@ export default function RootLayout({
       lang="es"
       className={`${geistSans.variable} ${geistMono.variable} ${titleFont.variable} ${bodyFont.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <LiteModeBoot />
+        {children}
+      </body>
     </html>
   );
 }

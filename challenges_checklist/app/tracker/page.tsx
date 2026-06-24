@@ -49,6 +49,7 @@ export default async function TrackerPage({
     locations,
     progressBundle,
     effects,
+    objectTags,
     adminRow,
   ] = await Promise.all([
     weekIds.length
@@ -67,6 +68,7 @@ export default async function TrackerPage({
       .select(
         "trigger_action, effect_action, amount_per_use, object:game_objects (id, code, display_name)"
       ),
+    supabase.from("game_object_tags").select("object_id, tag_id"),
     supabase
       .from("admin_users")
       .select("user_id")
@@ -88,6 +90,7 @@ export default async function TrackerPage({
       initialRuleProgress={progressBundle.ruleProgress}
       initialDistinctProgress={progressBundle.distinctProgress}
       effects={(effects.data ?? []) as never[]}
+      objectTagPairs={objectTags.data ?? []}
       isAdmin={!!adminRow.data}
       userId={user.id}
       actorName={

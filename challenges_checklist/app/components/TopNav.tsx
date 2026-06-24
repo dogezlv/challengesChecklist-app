@@ -2,6 +2,8 @@
 
 import Link from "next/link";
 import FortniteIcon from "./FortniteIcon";
+import LiteModeToggle from "./LiteModeToggle";
+import { useLiteMode } from "../lib/liteMode";
 import { bodyFont, fnt, fs, navTab, titleFont, yellowButton } from "../lib/theme";
 import type { Match } from "../lib/types";
 
@@ -91,8 +93,11 @@ export default function TopNav({
     onEnd: () => void;
   };
 }) {
+  const { lite } = useLiteMode();
+  const solid = solidSurface || lite;
+
   const nav = (
-    <nav style={navShell(sticky, solidSurface)}>
+    <nav style={navShell(sticky, solid)}>
       <div
         style={{
           display: "flex",
@@ -219,6 +224,7 @@ export default function TopNav({
             )}
           </div>
         )}
+        <LiteModeToggle />
         {right && (
           <div style={{ display: "flex", alignItems: "center", gap: fs(8, 12) }}>
             {right}

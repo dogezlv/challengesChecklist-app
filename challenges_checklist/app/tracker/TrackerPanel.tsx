@@ -14,14 +14,14 @@ import SearchBox from "../components/SearchBox";
 import IncompleteOnlyToggle from "../components/IncompleteOnlyToggle";
 import PrestigeViewToggle from "../components/PrestigeViewToggle";
 import WeekTabs from "../components/WeekTabs";
-import TrackerWeekAccordion from "./TrackerWeekAccordion";
+import BattlePassBanner from "../components/BattlePassBanner";
 import TopNav from "../components/TopNav";
 import TrackerLogsPanel from "../components/TrackerLogsPanel";
 import {
   TrackerLocalResultFeed,
   TrackerMiniLogFeed,
 } from "../components/TrackerMiniLogFeed";
-import { contentWrap, fnt, fs, pageBackground, pageMain, panel, pillTab, titleFont, weekAccent, yellowButton } from "../lib/theme";
+import { contentWrap, fnt, fs, pageMain, panel, pillTab, titleFont, weekAccent, yellowButton } from "../lib/theme";
 import {
   globalSection,
   logTrackerActivity,
@@ -61,7 +61,7 @@ import {
   type DistinctRow,
   type RuleProgressRow,
 } from "../lib/trackerSync";
-import { useTrackerLiteMode } from "../lib/trackerLite";
+import { useLiteMode } from "../lib/liteMode";
 
 // fila de match_rule_progress para marcar qué parte de un desafío
 // multi-opción ya está registrada
@@ -155,10 +155,32 @@ const EMPTY_SELECTION: Selection = {
 //   - condición sobre el objetivo → solo si el objetivo coincide EXACTO
 //     (con "entrega de suministros" elegida desaparece "disparo a la cabeza",
 //     pero "a 50 m" sigue disponible al elegir un arma).
+function objectHasTag(
+  objectId: string,
+  tagId: string,
+  tagSet: Set<string>
+): boolean {
+  return tagSet.has(`${objectId}:${tagId}`);
+}
+
+/** Objetivo concreto (p. ej. Boloncho) satisface regla por etiqueta (Vehículos). */
+function ruleTargetMatches(
+  selTarget: string | null,
+  ruleTargetKey: string | null,
+  tagSet: Set<string>
+): boolean {
+  if (ruleTargetKey === selTarget) return true;
+  if (selTarget?.startsWith("obj:") && ruleTargetKey?.startsWith("tag:")) {
+    return objectHasTag(selTarget.slice(4), ruleTargetKey.slice(4), tagSet);
+  }
+  return false;
+}
+
 function deriveCategoryView(
   cat: Category,
   sel: Selection,
-  namedLocations: { id: string; label: string }[]
+  namedLocations: { id: string; label: string }[],
+  objectTagSet: Set<string>
 ): CategoryView {
   const used = new Map<string, Option>();
   const target = new Map<string, Option>();
@@ -182,11 +204,8 @@ function deriveCategoryView(
   // reglas cuyas condiciones siguen teniendo sentido con la selección actual
   const covered = cat.rules.filter(
     (r) =>
-      // arma/objeto exigido por la regla: debe estar presionado
       (!r.usedKey || sel.used === r.usedKey) &&
-      // objetivo: coincidencia exacta (ambos vacíos también vale)
-      r.targetKey === sel.target &&
-      // lugar exigido por la regla: debe estar presionado
+      ruleTargetMatches(sel.target, r.targetKey, objectTagSet) &&
       (!r.locId || sel.loc === r.locId)
   );
   const condMap = new Map<string, string>();
@@ -366,6 +385,7 @@ export default function TrackerPanel({
   initialRuleProgress,
   initialDistinctProgress,
   effects,
+  objectTagPairs = [],
   isAdmin,
   userId,
   actorName,
@@ -383,14 +403,23 @@ export default function TrackerPanel({
   initialRuleProgress: RuleProgressRow[];
   initialDistinctProgress: DistinctRow[];
   effects: EffectRow[];
+  objectTagPairs?: { object_id: string; tag_id: string }[];
   isAdmin: boolean;
   userId: string;
   actorName: string;
   initialLite?: boolean;
 }) {
-  const { lite, toggleLite } = useTrackerLiteMode(initialLite);
+  const { lite } = useLiteMode(initialLite);
   const supabase = createClient();
   const router = useRouter();
+
+  const objectTagSet = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of objectTagPairs) {
+      set.add(`${p.object_id}:${p.tag_id}`);
+    }
+    return set;
+  }, [objectTagPairs]);
 
   const [challenges, setChallenges] = useState<Challenge[]>(initialChallenges);
   const [ruleProgress, setRuleProgress] =
@@ -400,9 +429,6 @@ export default function TrackerPanel({
   );
   const [activeMatch, setActiveMatch] = useState<Match | null>(initialActiveMatch);
   const [selectedWeekNumbers, setSelectedWeekNumbers] = useState<Set<number>>(
-    () => new Set()
-  );
-  const [expandedWeekIds, setExpandedWeekIds] = useState<Set<string>>(
     () => new Set()
   );
   const [selections, setSelections] = useState<Record<string, Selection>>({});
@@ -543,26 +569,6 @@ export default function TrackerPanel({
     setSelectedWeekNumbers(new Set());
   }, []);
 
-  const toggleWeekExpanded = useCallback((weekId: string) => {
-    setExpandedWeekIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(weekId)) next.delete(weekId);
-      else next.add(weekId);
-      return next;
-    });
-  }, []);
-
-  useEffect(() => {
-    const validIds = new Set(
-      weeks
-        .filter((w) => selectedWeekNumbers.has(w.week_number))
-        .map((w) => w.id)
-    );
-    setExpandedWeekIds((prev) => {
-      const next = new Set([...prev].filter((id) => validIds.has(id)));
-      return next.size === prev.size ? prev : next;
-    });
-  }, [weeks, selectedWeekNumbers]);
   const activeMatchRef = useRef(initialActiveMatch);
   activeMatchRef.current = activeMatch;
 
@@ -836,16 +842,18 @@ export default function TrackerPanel({
         }
         if (satisfied) continue;
 
-        // consumibles: el desafío (p. ej. "gana salud con manzanas") se
-        // registra consumiendo el objeto en su acción trigger ("usar"),
-        // no directamente en la categoría del efecto
+        // consumibles con efecto automático (manzana/seta): registrar en «usar».
+        // Bidón de plasma y jugo de sorbete van en «ganar» con cantidad parcial.
         const consumable = effects.find(
           (e) =>
             e.effect_action === code &&
             e.object &&
             r.required_object?.id === e.object.id
         );
-        if (consumable) {
+        const directGain =
+          consumable?.object?.code === "chug_jug" ||
+          consumable?.object?.code === "slurp_juice";
+        if (consumable && !directGain) {
           const accUse = getAcc(consumable.trigger_action);
           accUse.pending.add(c.id);
           accUse.rules.push({
@@ -1006,7 +1014,7 @@ export default function TrackerPanel({
 
     // solo se envían condiciones que aplican a la selección actual; las
     // automáticas (únicas en este contexto) van incluidas siempre
-    const view = deriveCategoryView(cat, sel, namedLocations);
+    const view = deriveCategoryView(cat, sel, namedLocations, objectTagSet);
     const conds = new Set(
       sel.conds.filter((k) => view.condOptions.some((c) => c.key === k))
     );
@@ -1346,11 +1354,16 @@ export default function TrackerPanel({
     for (const cat of categories) {
       map.set(
         cat.actionCode,
-        deriveCategoryView(cat, getSelection(cat.actionCode), namedLocations)
+        deriveCategoryView(
+          cat,
+          getSelection(cat.actionCode),
+          namedLocations,
+          objectTagSet
+        )
       );
     }
     return map;
-  }, [categories, selections, namedLocations]);
+  }, [categories, selections, namedLocations, objectTagSet]);
 
   const weekPanels = useMemo(() => {
     return viewWeeks.map((week) => {
@@ -1532,19 +1545,10 @@ export default function TrackerPanel({
 
   return (
     <main style={pageMain}>
-      {lite ? (
-        <div
-          className="fn-bg"
-          aria-hidden
-          style={{ background: pageBackground, position: "fixed", inset: 0, zIndex: -1 }}
-        />
-      ) : (
-        <PageBackground />
-      )}
+      <PageBackground />
       <div style={contentWrap}>
       <TopNav
         sticky
-        solidSurface={lite}
         tabs={navTabs}
         right={
           <>
@@ -1612,14 +1616,6 @@ export default function TrackerPanel({
             onClick={() => setTrackerView("logs")}
           >
             Registro
-          </button>
-          <button
-            type="button"
-            style={pillTab(lite)}
-            onClick={toggleLite}
-            title="Menos animaciones y sin blur (recomendado con el directo abierto)"
-          >
-            {lite ? "Modo ligero" : "Modo completo"}
           </button>
         </div>
       </header>
@@ -1980,18 +1976,32 @@ export default function TrackerPanel({
           if (items.length === 0 && !weekMeta) return null;
 
           const accent = weekAccent(week.week_number);
-          const expanded = expandedWeekIds.has(week.id);
           return (
-        <TrackerWeekAccordion
+        <div
           key={week.id}
-          expanded={expanded}
-          onToggle={() => toggleWeekExpanded(week.id)}
-          label="Desafíos del pase de batalla"
-          title={week.display_name ?? `Semana ${week.week_number}`}
-          subtitle="Completa los objetivos para avanzar"
-          percent={percent}
-          accent={accent}
+          style={{
+            borderRadius: 12,
+            overflow: "hidden",
+            border: `1px solid ${accent}59`,
+            boxShadow: "0 8px 26px rgba(0,0,0,0.32)",
+          }}
         >
+          <BattlePassBanner
+            label="Desafíos del pase de batalla"
+            title={week.display_name ?? `Semana ${week.week_number}`}
+            subtitle="Completa los objetivos para avanzar"
+            percent={percent}
+            accent={accent}
+            flush
+          />
+          <div
+            style={{
+              ...panel,
+              borderRadius: 0,
+              border: "none",
+              padding: `${fs(6, 12)} ${fs(8, 18)}`,
+            }}
+          >
           {weekMeta && (
             <MissionRow
               quest={weekMeta.description}
@@ -2409,7 +2419,8 @@ export default function TrackerPanel({
                 : "No hay desafíos para mostrar."}
             </p>
           )}
-        </TrackerWeekAccordion>
+          </div>
+        </div>
           );
         })}
 

@@ -4,6 +4,7 @@ import { useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import { useRouter } from "next/navigation";
 import FortniteIcon from "../components/FortniteIcon";
+import LiteModeToggle from "../components/LiteModeToggle";
 import PageBackground from "../components/PageBackground";
 import { fnt, pageMain, panel, yellowButton } from "../lib/theme";
 
@@ -57,6 +58,16 @@ export default function LoginPage() {
       }}
     >
       <PageBackground />
+      <div
+        style={{
+          position: "fixed",
+          top: 16,
+          right: 16,
+          zIndex: 200,
+        }}
+      >
+        <LiteModeToggle />
+      </div>
       <div
         style={{
           ...panel,
