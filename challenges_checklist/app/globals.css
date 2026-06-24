@@ -55,11 +55,9 @@ body {
 }
 .fn-bg-mesh {
   position: absolute;
-  /* sobredimensionado > 1 baldosa en cada lado para que la deriva no descubra
-     bordes; al moverse exactamente 1 baldosa el bucle es invisible. */
-  inset: -340px;
+  inset: 0;
   background-repeat: repeat;
-  will-change: transform;
+  will-change: background-position;
 }
 /* Malla fina (capa cercana), deriva diagonal hacia abajo-izquierda */
 .fn-bg-mesh--a {
@@ -76,72 +74,32 @@ body {
 }
 @keyframes fnBgDriftA {
   from {
-    transform: translate3d(0, 0, 0);
+    background-position: 0 0;
   }
   to {
-    transform: translate3d(-100px, -173.21px, 0);
+    background-position: -100px -173.21px;
   }
 }
 @keyframes fnBgDriftB {
   from {
-    transform: translate3d(0, 0, 0);
+    background-position: 0 0;
   }
   to {
-    transform: translate3d(160px, -277.13px, 0);
+    background-position: 160px -277.13px;
   }
 }
 
-/* Pestaña en segundo plano o modo ligero del tracker: sin animación de malla */
+/* Pestaña en segundo plano o modo ligero: sin animación de malla */
 .fn-bg--paused .fn-bg-mesh--a,
 .fn-bg--paused .fn-bg-mesh--b,
-.fn-bg-mesh--paused {
-  animation-play-state: paused !important;
-}
 html[data-lite="on"] .fn-bg-mesh {
   animation-play-state: paused !important;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .fn-bg-mesh {
-    animation: none !important;
-  }
 }
 
 /* Filas de misión fuera del viewport: menos layout/paint en listas largas */
 .tracker-mission-row {
   content-visibility: auto;
   contain-intrinsic-size: auto 72px;
-}
-
-/* Cuerpo desplegable de semanas en /tracker (solo montado al abrir) */
-@keyframes trackerWeekBodyIn {
-  from {
-    opacity: 0;
-    transform: translateY(-8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-.tracker-week-body {
-  animation: trackerWeekBodyIn 0.32s cubic-bezier(0.4, 0, 0.2, 1);
-  transform-origin: top center;
-}
-.tracker-week-chevron {
-  display: inline-block;
-  transition: transform 0.28s cubic-bezier(0.4, 0, 0.2, 1);
-}
-.tracker-week-chevron[data-expanded="true"] {
-  transform: rotate(90deg);
-}
-@media (prefers-reduced-motion: reduce) {
-  .tracker-week-body {
-    animation: none;
-  }
-  .tracker-week-chevron {
-    transition: none;
-  }
 }
 
 /* Tinte de PRESTIGIO sobre el fondo: lavado de color (de la semana) en los

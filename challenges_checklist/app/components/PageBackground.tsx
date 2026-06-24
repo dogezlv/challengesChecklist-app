@@ -1,11 +1,13 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { useLiteMode } from "../lib/liteMode";
 import { pageBackground } from "../lib/theme";
 
 // Fondo de página "Season X": degradado + malla triangular animada (GPU).
-// En pestaña oculta o modo ligero (`html[data-lite="on"]`) las animaciones se pausan.
+// Modo ligero (html[data-lite="on"]) o pestaña oculta: malla pausada.
 export default function PageBackground({ staticOnly = false }: { staticOnly?: boolean }) {
+  const { lite } = useLiteMode();
   const [hidden, setHidden] = useState(false);
 
   useEffect(() => {
@@ -15,7 +17,9 @@ export default function PageBackground({ staticOnly = false }: { staticOnly?: bo
     return () => document.removeEventListener("visibilitychange", onVis);
   }, []);
 
-  if (staticOnly) {
+  const staticBg = staticOnly || lite;
+
+  if (staticBg) {
     return (
       <div
         className="fn-bg"
@@ -30,10 +34,10 @@ export default function PageBackground({ staticOnly = false }: { staticOnly?: bo
   return (
     <div className={`fn-bg${paused}`} aria-hidden style={{ background: pageBackground }}>
       <div className="fn-bg-fade">
-        <div className={`fn-bg-mesh fn-bg-mesh--b${paused}`} />
+        <div className="fn-bg-mesh fn-bg-mesh--b" />
       </div>
       <div className="fn-bg-fade">
-        <div className={`fn-bg-mesh fn-bg-mesh--a${paused}`} />
+        <div className="fn-bg-mesh fn-bg-mesh--a" />
       </div>
       <div className="fn-bg-prestige" />
     </div>
