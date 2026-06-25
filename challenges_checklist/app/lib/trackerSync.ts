@@ -40,23 +40,56 @@ export function debounce<T extends (...args: never[]) => void>(
   return debounced;
 }
 
-const SCALAR_CHALLENGE_KEYS = [
-  "description",
-  "is_completed",
-  "current_value",
-  "target_value",
-  "completed_in_match",
-  "kind",
-  "unit",
-  "match_scope",
-  "rules_operator",
-  "line_id",
-  "phase_order",
-  "week_id",
-  "is_meta",
-  "is_prestige",
-  "created_at",
-] as const;
+function normalizeChallengeScalars(row: Partial<Challenge>): Partial<Challenge> {
+  const out = { ...row };
+  if (out.current_value != null) out.current_value = Number(out.current_value);
+  if (out.target_value != null) out.target_value = Number(out.target_value);
+  return out;
+}
+
+/**
+ * Aplica un evento Realtime de `challenges` (misma base que la checklist pública).
+ * En tracker, `preserveRules` mantiene `challenge_rules` del fetch inicial.
+ */
+export function applyChallengesRealtimeEvent(
+  prev: Challenge[],
+  eventType: "INSERT" | "UPDATE" | "DELETE",
+  oldRow: Partial<Challenge> | undefined,
+  newRow: (Partial<Challenge> & { id?: string }) | undefined,
+  weekIdSet: Set<string>,
+  options?: { preserveRules?: boolean }
+): Challenge[] {
+  if (eventType === "DELETE") {
+    const id = oldRow?.id;
+    return id ? prev.filter((c) => c.id !== id) : prev;
+  }
+
+  const row = newRow;
+  if (!row?.id) return prev;
+  if (row.week_id && !weekIdSet.has(row.week_id)) return prev;
+
+  const idx = prev.findIndex((c) => c.id === row.id);
+  const normalized = normalizeChallengeScalars(row);
+
+  if (idx === -1) {
+    return eventType === "INSERT" ? [...prev, normalized as Challenge] : prev;
+  }
+
+  const existing = prev[idx];
+  const next = prev.slice();
+
+  if (options?.preserveRules) {
+    next[idx] = {
+      ...existing,
+      ...normalized,
+      challenge_rules: existing.challenge_rules,
+    } as Challenge;
+  } else {
+    next[idx] = { ...existing, ...normalized } as Challenge;
+  }
+
+  return next;
+}
 
 /** Parche escalar preservando `challenge_rules` anidados. */
 export function patchChallengeRow(
@@ -65,33 +98,21 @@ export function patchChallengeRow(
   row: Partial<Challenge> & { id: string },
   weekIdSet: Set<string>
 ): Challenge[] {
-  if (eventType === "DELETE") {
-    return prev.filter((c) => c.id !== row.id);
-  }
-  if (row.week_id && !weekIdSet.has(row.week_id)) return prev;
-
-  const idx = prev.findIndex((c) => c.id === row.id);
-  if (idx === -1) {
-    return eventType === "INSERT" ? [...prev, row as Challenge] : prev;
-  }
-
-  const existing = prev[idx];
-  const merged = { ...existing } as Challenge;
-  for (const key of SCALAR_CHALLENGE_KEYS) {
-    if (key in row && row[key] !== undefined) {
-      (merged as Record<string, unknown>)[key] = row[key];
-    }
-  }
-  const next = prev.slice();
-  next[idx] = merged;
-  return next;
+  return applyChallengesRealtimeEvent(
+    prev,
+    eventType,
+    eventType === "DELETE" ? row : undefined,
+    row,
+    weekIdSet,
+    { preserveRules: true }
+  );
 }
 
 export function patchChallengesFromReport(
   prev: Challenge[],
   updated: ReportPatch[]
 ): Challenge[] {
-  if (!updated.length) return prev;
+  if (!updated?.length) return prev;
   const byId = new Map(updated.map((u) => [u.id, u]));
   return prev.map((c) => {
     const patch = byId.get(c.id);
@@ -100,9 +121,11 @@ export function patchChallengesFromReport(
       ...c,
       ...(patch.description !== undefined && { description: patch.description }),
       ...(patch.current_value !== undefined && {
-        current_value: patch.current_value,
+        current_value: Number(patch.current_value),
       }),
-      ...(patch.target_value !== undefined && { target_value: patch.target_value }),
+      ...(patch.target_value !== undefined && {
+        target_value: Number(patch.target_value),
+      }),
       ...(patch.is_completed !== undefined && { is_completed: patch.is_completed }),
     };
   });
@@ -142,32 +165,40 @@ export function ruleProgressHit(
   return rows.some(predicate);
 }
 
-/** Progreso acotado: acumuladores globales + partida activa. */
+/** Progreso de reglas/ubicaciones distintas para desafíos de las semanas cargadas. */
 export async function fetchProgressOnly(
   supabase: SupabaseClient,
-  activeMatchId: string | null
+  weekIds: string[]
 ): Promise<{ ruleProgress: RuleProgressRow[]; distinctProgress: DistinctRow[] }> {
-  let ruleQuery = supabase
-    .from("match_rule_progress")
-    .select("challenge_rule_id, match_id");
-  if (activeMatchId) {
-    ruleQuery = ruleQuery.or(`match_id.is.null,match_id.eq.${activeMatchId}`);
-  } else {
-    ruleQuery = ruleQuery.is("match_id", null);
+  if (!weekIds.length) {
+    return { ruleProgress: [], distinctProgress: [] };
   }
 
-  let distinctQuery = supabase
-    .from("challenge_distinct_progress")
-    .select("challenge_id, location_id, match_id");
-  if (activeMatchId) {
-    distinctQuery = distinctQuery.or(
-      `match_id.is.null,match_id.eq.${activeMatchId}`
-    );
-  } else {
-    distinctQuery = distinctQuery.is("match_id", null);
+  const { data: challengeRows, error: chErr } = await supabase
+    .from("challenges")
+    .select("id")
+    .in("week_id", weekIds);
+  if (chErr) throw new Error(chErr.message);
+
+  const challengeIds = (challengeRows ?? []).map((r) => r.id);
+  if (!challengeIds.length) {
+    return { ruleProgress: [], distinctProgress: [] };
   }
 
-  const [ruleRes, distinctRes] = await Promise.all([ruleQuery, distinctQuery]);
+  const [ruleRes, distinctRes] = await Promise.all([
+    supabase
+      .from("match_rule_progress")
+      .select("challenge_rule_id, match_id")
+      .in("challenge_id", challengeIds),
+    supabase
+      .from("challenge_distinct_progress")
+      .select("challenge_id, location_id, match_id")
+      .in("challenge_id", challengeIds),
+  ]);
+
+  if (ruleRes.error) throw new Error(ruleRes.error.message);
+  if (distinctRes.error) throw new Error(distinctRes.error.message);
+
   return {
     ruleProgress: (ruleRes.data ?? []) as RuleProgressRow[],
     distinctProgress: (distinctRes.data ?? []) as DistinctRow[],

@@ -4,7 +4,7 @@ import Link from "next/link";
 import FortniteIcon from "./FortniteIcon";
 import LiteModeToggle from "./LiteModeToggle";
 import { useLiteMode } from "../lib/liteMode";
-import { bodyFont, fnt, fs, navTab, titleFont, yellowButton } from "../lib/theme";
+import { bodyFont, fnt, fs, navTab, PRESTIGE_ACCENT, titleFont, yellowButton } from "../lib/theme";
 import type { Match } from "../lib/types";
 
 export type NavTab = { label: string; href: string; active?: boolean };
@@ -73,12 +73,36 @@ function matchBtn(
   };
 }
 
+function navIconBtn(
+  busy: boolean,
+  extra?: React.CSSProperties
+): React.CSSProperties {
+  return {
+    ...yellowButton,
+    padding: `${fs(6, 8)} ${fs(8, 10)}`,
+    minWidth: fs(34, 42),
+    minHeight: fs(32, 40),
+    borderRadius: 6,
+    fontSize: fs(17, 22),
+    lineHeight: 1,
+    opacity: busy ? 0.55 : 1,
+    cursor: busy ? "not-allowed" : "pointer",
+    display: "inline-flex",
+    alignItems: "center",
+    justifyContent: "center",
+    boxShadow: "0 2px 0 rgba(0,0,0,0.18)",
+    ...extra,
+  };
+}
+
 export default function TopNav({
   tabs,
   right,
   sticky = false,
   solidSurface = false,
   matchControls,
+  progressReload,
+  prestigeToggle,
 }: {
   tabs: NavTab[];
   right?: React.ReactNode;
@@ -92,6 +116,10 @@ export default function TopNav({
     onWin: () => void;
     onEnd: () => void;
   };
+  /** Recarga manual de progreso (tracker). */
+  progressReload?: { busy: boolean; onReload: () => void };
+  /** Vista prestigio (tracker). */
+  prestigeToggle?: { active: boolean; onToggle: () => void };
 }) {
   const { lite } = useLiteMode();
   const solid = solidSurface || lite;
@@ -223,6 +251,37 @@ export default function TopNav({
               </>
             )}
           </div>
+        )}
+        {prestigeToggle && (
+          <button
+            type="button"
+            onClick={prestigeToggle.onToggle}
+            title={prestigeToggle.active ? "Ver desafíos normales" : "Ver prestigio"}
+            aria-pressed={prestigeToggle.active}
+            style={navIconBtn(false, {
+              ...(prestigeToggle.active
+                ? {
+                    background: `linear-gradient(180deg, ${PRESTIGE_ACCENT} 0%, #0d9488 100%)`,
+                    color: "#042f2e",
+                    border: `1px solid ${PRESTIGE_ACCENT}`,
+                  }
+                : {}),
+            })}
+          >
+            ✦
+          </button>
+        )}
+        {progressReload && (
+          <button
+            type="button"
+            disabled={progressReload.busy}
+            onClick={progressReload.onReload}
+            title="Recargar progreso desde el servidor"
+            aria-label="Recargar progreso"
+            style={navIconBtn(progressReload.busy)}
+          >
+            {progressReload.busy ? "…" : "↻"}
+          </button>
         )}
         <LiteModeToggle />
         {right && (
