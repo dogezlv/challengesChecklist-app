@@ -127,7 +127,7 @@ begin
 
   update challenges set
     description = 'Consume diferentes tipos de alimento',
-    kind = 'progress', unit = 'count', match_scope = 'same_match',
+    kind = 'progress', unit = 'count', match_scope = 'any_match',
     target_value = 5, rules_operator = 'and', current_value = 0, is_completed = false
   where id = v_id;
 

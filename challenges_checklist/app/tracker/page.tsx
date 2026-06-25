@@ -40,8 +40,6 @@ export default async function TrackerPage({
     .eq("is_active", true)
     .maybeSingle();
 
-  const activeMatchId = activeMatch?.id ?? null;
-
   const [
     challenges,
     lines,
@@ -62,7 +60,7 @@ export default async function TrackerPage({
     supabase.from("challenge_lines").select("*"),
     supabase.from("action_types").select("*").order("display_name"),
     supabase.from("locations").select("*").order("display_name"),
-    fetchProgressOnly(supabase, activeMatchId),
+    fetchProgressOnly(supabase, weekIds),
     supabase
       .from("object_effects")
       .select(

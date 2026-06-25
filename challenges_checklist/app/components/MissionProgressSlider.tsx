@@ -9,6 +9,7 @@ function MissionProgressSlider({
   target,
   locked,
   accent,
+  onPreview,
   onCommit,
 }: {
   challengeId: string;
@@ -16,6 +17,7 @@ function MissionProgressSlider({
   target: number;
   locked: boolean;
   accent: string;
+  onPreview?: (value: number) => void;
   onCommit: (value: number) => void;
 }) {
   const [local, setLocal] = useState(current);
@@ -31,9 +33,18 @@ function MissionProgressSlider({
       max={target}
       disabled={locked}
       value={local}
-      onChange={(e) => setLocal(Number(e.target.value))}
+      onChange={(e) => {
+        const v = Number(e.target.value);
+        setLocal(v);
+        onPreview?.(v);
+      }}
       onMouseUp={(e) => onCommit(Number(e.currentTarget.value))}
       onTouchEnd={(e) => onCommit(Number(e.currentTarget.value))}
+      onKeyUp={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          onCommit(Number(e.currentTarget.value));
+        }
+      }}
       style={{
         width: "100%",
         accentColor: accent,

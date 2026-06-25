@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import MissionRow from "./MissionRow";
@@ -13,11 +13,16 @@ import BattlePassBanner from "./BattlePassBanner";
 import { fnt, fs, panel, weekAccent } from "../lib/theme";
 import type { Season, Week } from "../lib/selection";
 import {
+  readTrackerViewPrefs,
+  writeTrackerViewPrefs,
+} from "../lib/trackerPrefs";
+import {
   normalizeText,
   sortWeekChallenges,
   type Challenge,
   type LineRow,
 } from "../lib/types";
+import { applyChallengesRealtimeEvent } from "../lib/trackerSync";
 
 // Vista pública de solo lectura: recibe TODA la temporada de una vez y cambia
 // de semana en el cliente (sin ida al servidor). Se actualiza en vivo vía
@@ -46,6 +51,17 @@ export default function ChallengeChecklist({
   const [onlyIncomplete, setOnlyIncomplete] = useState(false);
   // modo prestigio: muestra los desafíos extra (más difíciles) con tema teal
   const [prestige, setPrestige] = useState(false);
+  const skipPrestigePersist = useRef(true);
+
+  useEffect(() => {
+    skipPrestigePersist.current = true;
+    const { prestigeView } = readTrackerViewPrefs(
+      seasonCode,
+      weeks.map((w) => w.week_number)
+    );
+    setPrestige(prestigeView);
+    skipPrestigePersist.current = false;
+  }, [seasonCode, weeks]);
 
   // re-sincroniza cuando el servidor manda otra temporada (ajuste de estado
   // durante el render comparando la prop anterior, sin efecto)
@@ -68,19 +84,15 @@ export default function ChallengeChecklist({
         "postgres_changes",
         { event: "*", schema: "public", table: "challenges" },
         (payload) => {
-          setChallenges((prev) => {
-            if (payload.eventType === "DELETE") {
-              const oldId = (payload.old as { id?: string }).id;
-              return oldId ? prev.filter((c) => c.id !== oldId) : prev;
-            }
-            const row = payload.new as Challenge;
-            if (row.week_id && !weekIdSet.has(row.week_id)) return prev;
-            const idx = prev.findIndex((c) => c.id === row.id);
-            if (idx === -1) return [...prev, row];
-            const next = prev.slice();
-            next[idx] = row;
-            return next;
-          });
+          setChallenges((prev) =>
+            applyChallengesRealtimeEvent(
+              prev,
+              payload.eventType as "INSERT" | "UPDATE" | "DELETE",
+              payload.old as Partial<Challenge>,
+              payload.new as Partial<Challenge>,
+              weekIdSet
+            )
+          );
         }
       )
       .subscribe();
@@ -225,7 +237,15 @@ export default function ChallengeChecklist({
         </div>
         <PrestigeViewToggle
           active={prestige}
-          onToggle={() => setPrestige((p) => !p)}
+          onToggle={() =>
+            setPrestige((p) => {
+              const next = !p;
+              if (!skipPrestigePersist.current) {
+                writeTrackerViewPrefs(seasonCode, { prestige: next });
+              }
+              return next;
+            })
+          }
         />
         <IncompleteOnlyToggle
           active={onlyIncomplete}

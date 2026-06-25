@@ -12,7 +12,6 @@ import MissionProgressSlider from "../components/MissionProgressSlider";
 import PageBackground from "../components/PageBackground";
 import SearchBox from "../components/SearchBox";
 import IncompleteOnlyToggle from "../components/IncompleteOnlyToggle";
-import PrestigeViewToggle from "../components/PrestigeViewToggle";
 import WeekTabs from "../components/WeekTabs";
 import BattlePassBanner from "../components/BattlePassBanner";
 import TopNav from "../components/TopNav";
@@ -53,7 +52,7 @@ import {
   debounce,
   fetchFullChallenges,
   fetchProgressOnly,
-  patchChallengeRow,
+  applyChallengesRealtimeEvent,
   patchChallengesFromReport,
   patchDistinctRow,
   patchRuleProgressRow,
@@ -62,6 +61,10 @@ import {
   type RuleProgressRow,
 } from "../lib/trackerSync";
 import { useLiteMode } from "../lib/liteMode";
+import {
+  readTrackerViewPrefs,
+  writeTrackerViewPrefs,
+} from "../lib/trackerPrefs";
 
 // fila de match_rule_progress para marcar qué parte de un desafío
 // multi-opción ya está registrada
@@ -436,7 +439,10 @@ export default function TrackerPanel({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [busyMatch, setBusyMatch] = useState(false);
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
+  /** Valor en vivo del slider antes de soltar (actualiza X/Y y barra). */
+  const [sliderPreview, setSliderPreview] = useState<Record<string, number>>({});
   const [busyRule, setBusyRule] = useState<string | null>(null);
+  const [busyReload, setBusyReload] = useState(false);
   const [cannonArrivalByChallenge, setCannonArrivalByChallenge] = useState<
     Record<string, string>
   >({});
@@ -445,6 +451,14 @@ export default function TrackerPanel({
   // vista de prestigio en el panel por semana (no mezclar con los normales)
   const [prestigeView, setPrestigeView] = useState(false);
   const [trackerView, setTrackerView] = useState<"track" | "logs">("track");
+
+  const persistViewPrefs = useCallback(
+    (patch: { weeks?: number[]; prestige?: boolean }) => {
+      if (!seasonCode) return;
+      writeTrackerViewPrefs(seasonCode, patch);
+    },
+    [seasonCode]
+  );
   const [remoteLogs, setRemoteLogs] = useState<Record<string, TrackerLogRow[]>>(
     {}
   );
@@ -549,37 +563,101 @@ export default function TrackerPanel({
   const hasWeekFilter = selectedWeekNumbers.size > 0;
 
   useEffect(() => {
-    setSelectedWeekNumbers(new Set());
-  }, [seasonCode]);
+    const valid = weeks.map((w) => w.week_number);
+    const { selectedWeeks, prestigeView: pv } = readTrackerViewPrefs(
+      seasonCode,
+      valid
+    );
+    setSelectedWeekNumbers(selectedWeeks);
+    setPrestigeView(pv);
+  }, [seasonCode, weeks]);
 
-  const toggleWeekSelection = useCallback((weekNumber: number) => {
-    setSelectedWeekNumbers((prev) => {
-      const next = new Set(prev);
-      if (next.has(weekNumber)) next.delete(weekNumber);
-      else next.add(weekNumber);
-      return next;
-    });
-  }, []);
+  const toggleWeekSelection = useCallback(
+    (weekNumber: number) => {
+      setSelectedWeekNumbers((prev) => {
+        const next = new Set(prev);
+        if (next.has(weekNumber)) next.delete(weekNumber);
+        else next.add(weekNumber);
+        persistViewPrefs({ weeks: [...next].sort((a, b) => a - b) });
+        return next;
+      });
+    },
+    [persistViewPrefs]
+  );
 
   const selectAllWeeks = useCallback(() => {
-    setSelectedWeekNumbers(new Set(weeks.map((w) => w.week_number)));
-  }, [weeks]);
+    const next = new Set(weeks.map((w) => w.week_number));
+    setSelectedWeekNumbers(next);
+    persistViewPrefs({ weeks: [...next].sort((a, b) => a - b) });
+  }, [weeks, persistViewPrefs]);
 
   const selectNoWeeks = useCallback(() => {
     setSelectedWeekNumbers(new Set());
-  }, []);
+    persistViewPrefs({ weeks: [] });
+  }, [persistViewPrefs]);
+
+  const togglePrestigeView = useCallback(() => {
+    setPrestigeView((p) => {
+      const next = !p;
+      persistViewPrefs({ prestige: next });
+      return next;
+    });
+  }, [persistViewPrefs]);
 
   const activeMatchRef = useRef(initialActiveMatch);
   activeMatchRef.current = activeMatch;
 
+  const challengeIdSetRef = useRef(new Set<string>());
+  const ruleToChallengeRef = useRef(new Map<string, string>());
+  useEffect(() => {
+    const ids = new Set<string>();
+    const ruleMap = new Map<string, string>();
+    for (const c of challenges) {
+      ids.add(c.id);
+      for (const r of c.challenge_rules ?? []) {
+        ruleMap.set(r.id, c.id);
+      }
+    }
+    challengeIdSetRef.current = ids;
+    ruleToChallengeRef.current = ruleMap;
+  }, [challenges]);
+
   const loadProgress = useCallback(async () => {
-    const bundle = await fetchProgressOnly(
-      supabase,
-      activeMatchRef.current?.id ?? null
-    );
+    const bundle = await fetchProgressOnly(supabase, weekIds);
     setRuleProgress(bundle.ruleProgress);
     setDistinctProgress(bundle.distinctProgress);
-  }, [supabase]);
+  }, [supabase, weekIds]);
+
+  const refreshChallengeScalars = useCallback(
+    async (challengeId: string) => {
+      const { data, error } = await supabase
+        .from("challenges")
+        .select("id, current_value, is_completed, completed_in_match")
+        .eq("id", challengeId)
+        .single();
+      if (error || !data) return;
+      setChallenges((prev) =>
+        prev.map((c) =>
+          c.id === challengeId
+            ? {
+                ...c,
+                current_value: Number(data.current_value ?? 0),
+                is_completed: data.is_completed,
+                completed_in_match: data.completed_in_match,
+              }
+            : c
+        )
+      );
+    },
+    [supabase]
+  );
+
+  const syncManualChallenge = useCallback(
+    async (challengeId: string) => {
+      await Promise.all([refreshChallengeScalars(challengeId), loadProgress()]);
+    },
+    [refreshChallengeScalars, loadProgress]
+  );
 
   const loadFullChallenges = useCallback(async () => {
     if (!weekIds.length) return;
@@ -591,6 +669,29 @@ export default function TrackerPanel({
       /* ignore */
     }
   }, [supabase, weekIds, loadProgress]);
+
+  const loadMatch = useCallback(async () => {
+    const { data } = await supabase
+      .from("matches")
+      .select("*")
+      .eq("is_active", true)
+      .maybeSingle();
+    const next = (data as Match) ?? null;
+    setActiveMatch(next);
+    activeMatchRef.current = next;
+    await loadProgress();
+  }, [supabase, loadProgress]);
+
+  const reloadAllProgress = useCallback(async () => {
+    setBusyReload(true);
+    setSliderPreview({});
+    try {
+      await loadMatch();
+      await loadFullChallenges();
+    } finally {
+      setBusyReload(false);
+    }
+  }, [loadMatch, loadFullChallenges]);
 
   const debouncedFullLoadRef = useRef(
     debounce(() => {
@@ -605,18 +706,6 @@ export default function TrackerPanel({
     return () => debouncedFullLoadRef.current.cancel();
   }, [loadFullChallenges]);
 
-  async function loadMatch() {
-    const { data } = await supabase
-      .from("matches")
-      .select("*")
-      .eq("is_active", true)
-      .maybeSingle();
-    const next = (data as Match) ?? null;
-    setActiveMatch(next);
-    activeMatchRef.current = next;
-    await loadProgress();
-  }
-
   useEffect(() => {
     const channel = supabase
       .channel("tracker-realtime")
@@ -625,16 +714,19 @@ export default function TrackerPanel({
         { event: "*", schema: "public", table: "challenges" },
         (payload) => {
           const eventType = payload.eventType as "INSERT" | "UPDATE" | "DELETE";
-          const row = (eventType === "DELETE" ? payload.old : payload.new) as
-            | (Partial<Challenge> & { id: string })
-            | undefined;
-          if (!row?.id) return;
           if (eventType === "INSERT") {
             debouncedFullLoadRef.current();
             return;
           }
           setChallenges((prev) =>
-            patchChallengeRow(prev, eventType, row, weekIdSet)
+            applyChallengesRealtimeEvent(
+              prev,
+              eventType,
+              payload.old as Partial<Challenge>,
+              payload.new as Partial<Challenge>,
+              weekIdSet,
+              { preserveRules: true }
+            )
           );
         }
       )
@@ -651,9 +743,13 @@ export default function TrackerPanel({
         (payload) => {
           const eventType = payload.eventType;
           const row = (eventType === "DELETE" ? payload.old : payload.new) as
-            | (RuleProgressRow & { id?: string })
+            | (RuleProgressRow & { id?: string; challenge_id?: string })
             | undefined;
           if (!row?.challenge_rule_id) return;
+          const challengeId =
+            row.challenge_id ??
+            ruleToChallengeRef.current.get(row.challenge_rule_id);
+          if (!challengeId || !challengeIdSetRef.current.has(challengeId)) return;
           setRuleProgress((prev) =>
             patchRuleProgressRow(prev, eventType, row)
           );
@@ -668,6 +764,7 @@ export default function TrackerPanel({
             | DistinctRow
             | undefined;
           if (!row?.challenge_id) return;
+          if (!challengeIdSetRef.current.has(row.challenge_id)) return;
           setDistinctProgress((prev) =>
             patchDistinctRow(prev, eventType, row)
           );
@@ -1044,6 +1141,7 @@ export default function TrackerPanel({
       if (res.updated?.length) {
         setChallenges((prev) => patchChallengesFromReport(prev, res.updated!));
       }
+      await loadProgress();
       await emitLog(
         globalSection(cat.actionCode),
         cat.actionCode,
@@ -1110,6 +1208,7 @@ export default function TrackerPanel({
     if (winRes?.updated?.length) {
       setChallenges((prev) => patchChallengesFromReport(prev, winRes.updated!));
     }
+    await loadProgress();
     const { error: endErr } = await supabase.rpc("end_active_match");
     setBusyMatch(false);
     if (endErr) alert(endErr.message);
@@ -1164,6 +1263,7 @@ export default function TrackerPanel({
 
     if (error) alert(error.message);
     else {
+      await loadProgress();
       await emitLog(WEEK_SECTION, null, {
         message: `🔄 Progreso reiniciado: ${challenge.description}`,
         action: {
@@ -1199,7 +1299,19 @@ export default function TrackerPanel({
 
   // ¿esta opción ya quedó registrada? (acumulador global para any_match;
   // por partida activa para same_match; cualquier partida para different)
-  function isRuleDone(c: Challenge, ruleId: string): boolean {
+  function isRuleDone(c: Challenge, rule: Rule): boolean {
+    if (c.unit === "distinct_location" && rule.location?.id) {
+      const rows = distinctProgressIndex.get(c.id) ?? [];
+      return rows.some((d) => {
+        if (d.location_id !== rule.location!.id) return false;
+        if (c.match_scope === "same_match") {
+          return !!activeMatch && d.match_id === activeMatch.id;
+        }
+        return d.match_id === null;
+      });
+    }
+
+    const ruleId = rule.id;
     if (c.match_scope === "same_match") {
       return (
         !!activeMatch &&
@@ -1222,6 +1334,23 @@ export default function TrackerPanel({
       ruleId,
       (p) => p.match_id === null
     );
+  }
+
+  /** Contador X/Y alineado con chips (multi-opción) o current_value (resto). */
+  function resolveMissionProgress(
+    c: Challenge,
+    displayOptionRules: Rule[],
+    isOptionBased: boolean
+  ): { current: number; target: number } {
+    const target = c.target_value ?? 1;
+    if (isOptionBased && displayOptionRules.length >= 2) {
+      const ruleHits = displayOptionRules.filter((r) => isRuleDone(c, r)).length;
+      return {
+        current: Math.max(ruleHits, c.current_value ?? 0),
+        target,
+      };
+    }
+    return { current: c.current_value ?? 0, target };
   }
 
   async function registerRule(c: Challenge, r: Rule) {
@@ -1274,11 +1403,12 @@ export default function TrackerPanel({
       if (res?.updated?.length) {
         setChallenges((prev) => patchChallengesFromReport(prev, res.updated!));
       }
+      await syncManualChallenge(c.id);
     }
   }
 
   // despresionar una opción ya registrada: quita ese registro y recalcula
-  async function undoRule(r: Rule) {
+  async function undoRule(c: Challenge, r: Rule) {
     setBusyRule(r.id);
     const { error } = await supabase.rpc("undo_rule_event", {
       p_rule_id: r.id,
@@ -1295,17 +1425,49 @@ export default function TrackerPanel({
           action: ruleActionContext(r),
         }
       );
+      await syncManualChallenge(c.id);
     }
   }
 
   async function increaseProgress(challenge: Challenge, amount: number) {
+    const snapshot = {
+      current_value: challenge.current_value ?? 0,
+      is_completed: challenge.is_completed,
+    };
+
+    setChallenges((prev) =>
+      prev.map((c) => {
+        if (c.id !== challenge.id) return c;
+        const prevValue = c.current_value ?? 0;
+        const target = c.target_value ?? 1;
+        const nextValue = Math.max(0, Math.min(prevValue + amount, target));
+        return {
+          ...c,
+          current_value: nextValue,
+          is_completed: nextValue >= target,
+        };
+      })
+    );
+
     const { error } = await supabase.rpc("increase_challenge_progress", {
       p_challenge_id: challenge.id,
       p_increase_value: amount,
     });
 
-    if (error) alert(error.message);
-    else {
+    if (error) {
+      alert(error.message);
+      setChallenges((prev) =>
+        prev.map((c) =>
+          c.id === challenge.id
+            ? {
+                ...c,
+                current_value: snapshot.current_value,
+                is_completed: snapshot.is_completed,
+              }
+            : c
+        )
+      );
+    } else {
       await emitLog(WEEK_SECTION, null, {
         message: `${amount >= 0 ? "+" : ""}${amount} · ${challenge.description}`,
         action: {
@@ -1318,18 +1480,53 @@ export default function TrackerPanel({
   }
 
   async function setProgress(challenge: Challenge, newValue: number) {
-    const { error } = await supabase.rpc("update_challenge_progress", {
-      p_challenge_id: challenge.id,
-      p_current_value: newValue,
+    const prevValue = challenge.current_value ?? 0;
+    const target = challenge.target_value ?? 1;
+    const clamped = Math.max(0, Math.min(newValue, target));
+
+    setSliderPreview((prev) => {
+      if (prev[challenge.id] === undefined) return prev;
+      const next = { ...prev };
+      delete next[challenge.id];
+      return next;
     });
 
-    if (error) alert(error.message);
-    else {
+    setChallenges((prev) =>
+      prev.map((c) =>
+        c.id === challenge.id
+          ? {
+              ...c,
+              current_value: clamped,
+              is_completed: clamped >= target,
+            }
+          : c
+      )
+    );
+
+    const { error } = await supabase.rpc("update_challenge_progress", {
+      p_challenge_id: challenge.id,
+      p_current_value: clamped,
+    });
+
+    if (error) {
+      alert(error.message);
+      setChallenges((prev) =>
+        prev.map((c) =>
+          c.id === challenge.id
+            ? {
+                ...c,
+                current_value: prevValue,
+                is_completed: challenge.is_completed,
+              }
+            : c
+        )
+      );
+    } else {
       await emitLog(WEEK_SECTION, null, {
-        message: `=${newValue} · ${challenge.description}`,
+        message: `=${clamped} · ${challenge.description}`,
         action: {
           actionName: "Vista semanal",
-          amount: newValue,
+          amount: clamped,
           conditions: ["Fijar progreso"],
         },
       });
@@ -1571,6 +1768,14 @@ export default function TrackerPanel({
           onStart: startMatch,
           onWin: winMatch,
           onEnd: endMatch,
+        }}
+        progressReload={{
+          busy: busyReload,
+          onReload: () => void reloadAllProgress(),
+        }}
+        prestigeToggle={{
+          active: prestigeView,
+          onToggle: togglePrestigeView,
         }}
       />
 
@@ -1956,10 +2161,6 @@ export default function TrackerPanel({
               placeholder={searchPlaceholder}
             />
           </div>
-          <PrestigeViewToggle
-            active={prestigeView}
-            onToggle={() => setPrestigeView((p) => !p)}
-          />
           <IncompleteOnlyToggle
             active={onlyIncomplete}
             onChange={setOnlyIncomplete}
@@ -2013,8 +2214,6 @@ export default function TrackerPanel({
             />
           )}
           {items.map((c, i) => {
-            const current = c.current_value ?? 0;
-            const target = c.target_value ?? 1;
             // bloqueado por fase O por ser prestigio con la semana incompleta
             const locked = lockedIds.has(c.id) || prestigeLockedIds.has(c.id);
             // la partida activa solo se exige para AÑADIR progreso en
@@ -2023,11 +2222,6 @@ export default function TrackerPanel({
             const matchBlocked =
               (c.match_scope !== "any_match" || !!c.line_id) && !activeMatch;
             const addBlocked = locked || matchBlocked;
-            const hasProgress = current > 0 || c.is_completed;
-            // desafíos con varios objetivos/objetos/lugares: un botón por
-            // opción; con una sola opción (o sin distinción) se mantienen
-            // los controles normales. Los de cantidad (daño, vida…) nunca
-            // usan botones: necesitan la cantidad editable
             const optionRules = (c.challenge_rules ?? []).filter((r) =>
               ruleLabel(r)
             );
@@ -2037,6 +2231,12 @@ export default function TrackerPanel({
                 ? optionRules.filter((r) => r.action_type?.code === "land")
                 : optionRules;
             const ctrl = deriveMissionControls(c, displayOptionRules);
+            const { current, target } = resolveMissionProgress(
+              c,
+              displayOptionRules,
+              ctrl.isOptionBased
+            );
+            const hasProgress = current > 0 || c.is_completed;
             const showOptionChips =
               ctrl.isOptionBased &&
               !c.is_completed &&
@@ -2062,13 +2262,21 @@ export default function TrackerPanel({
             const showLocHint =
               !!singleLocLabel && !showOptionChips && !c.is_completed;
 
+            const sliderLive = sliderPreview[c.id];
+            const displayCurrent =
+              ctrl.showSlider && sliderLive !== undefined ? sliderLive : current;
+            const displayCompleted =
+              ctrl.showSlider && sliderLive !== undefined
+                ? sliderLive >= target
+                : c.is_completed;
+
             return (
               <MissionRow
                 key={c.id}
                 quest={c.description}
-                current={current}
+                current={displayCurrent}
                 target={target}
-                completed={c.is_completed}
+                completed={displayCompleted}
                 locked={locked}
                 accent={accent}
                 first={!weekMeta && i === 0}
@@ -2144,7 +2352,7 @@ export default function TrackerPanel({
                     }}
                   >
                     {displayOptionRules.map((r) => {
-                      const done = isRuleDone(c, r.id);
+                      const done = isRuleDone(c, r);
                       const needsArrival = ruleNeedsNamedArrival(r);
                       const arrivalOk =
                         !needsArrival ||
@@ -2158,7 +2366,7 @@ export default function TrackerPanel({
                           key={r.id}
                           disabled={chipDisabled}
                           onClick={() =>
-                            done ? undoRule(r) : registerRule(c, r)
+                            done ? undoRule(c, r) : registerRule(c, r)
                           }
                           title={
                             done
@@ -2251,8 +2459,11 @@ export default function TrackerPanel({
                       current={current}
                       target={target}
                       locked={locked}
-                      accent={c.is_completed ? "#22c55e" : "#3b82f6"}
-                      onCommit={(v) => setProgress(c, v)}
+                      accent={displayCompleted ? "#22c55e" : "#3b82f6"}
+                      onPreview={(v) =>
+                        setSliderPreview((prev) => ({ ...prev, [c.id]: v }))
+                      }
+                      onCommit={(v) => void setProgress(c, v)}
                     />
                     )}
                     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
