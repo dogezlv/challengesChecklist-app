@@ -23,6 +23,7 @@ import {
 import { contentWrap, fnt, fs, pageMain, panel, pillTab, titleFont, weekAccent, yellowButton } from "../lib/theme";
 import {
   globalSection,
+  groupRecentLogsBySection,
   logTrackerActivity,
   MATCH_SECTION,
   upsertSectionLogRow,
@@ -463,9 +464,19 @@ export default function TrackerPanel({
     {}
   );
 
-  const pushSectionLog = (row: TrackerLogRow) => {
+  const pushSectionLog = useCallback((row: TrackerLogRow) => {
     setRemoteLogs((prev) => upsertSectionLogRow(prev, row));
-  };
+  }, []);
+
+  const loadRecentSectionLogs = useCallback(async () => {
+    const { data, error } = await supabase
+      .from("tracker_activity_logs")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(120);
+    if (error || !data) return;
+    setRemoteLogs(groupRecentLogsBySection(data as TrackerLogRow[]));
+  }, [supabase]);
 
   function makeLogRow(
     section: string,
@@ -779,20 +790,30 @@ export default function TrackerPanel({
   }, [weekIds.join(",")]);
 
   useEffect(() => {
-    if (trackerView !== "logs") return;
+    if (trackerView !== "track") return;
+
+    void loadRecentSectionLogs();
+
     const channel = supabase
-      .channel("tracker-activity")
+      .channel("tracker-activity-panels")
       .on(
         "postgres_changes",
         { event: "INSERT", schema: "public", table: "tracker_activity_logs" },
         (payload) => pushSectionLog(payload.new as TrackerLogRow)
       )
       .subscribe();
+
+    const onCleared = () => {
+      setRemoteLogs({});
+      void loadRecentSectionLogs();
+    };
+    window.addEventListener("tracker-logs-cleared", onCleared);
+
     return () => {
       supabase.removeChannel(channel);
+      window.removeEventListener("tracker-logs-cleared", onCleared);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [userId, trackerView]);
+  }, [trackerView, supabase, pushSectionLog, loadRecentSectionLogs]);
 
   const lockedIds = useMemo(() => computeLockedIds(challenges), [challenges]);
 
@@ -1847,7 +1868,7 @@ export default function TrackerPanel({
 
       {trackerView === "track" && remoteLogs[MATCH_SECTION]?.length > 0 && (
         <div style={{ marginBottom: 14 }}>
-          <TrackerMiniLogFeed entries={remoteLogs[MATCH_SECTION] ?? []} />
+          <TrackerMiniLogFeed entries={remoteLogs[MATCH_SECTION] ?? []} showActor />
         </div>
       )}
 
@@ -2121,6 +2142,7 @@ export default function TrackerPanel({
               {(remoteLogs[globalSection(cat.actionCode)]?.length ?? 0) > 0 && (
                 <TrackerMiniLogFeed
                   entries={remoteLogs[globalSection(cat.actionCode)] ?? []}
+                  showActor
                 />
               )}
 
@@ -2142,7 +2164,7 @@ export default function TrackerPanel({
       {/* Desafíos por semana */}
       {(remoteLogs[WEEK_SECTION]?.length ?? 0) > 0 && (
         <div style={{ marginBottom: 12 }}>
-          <TrackerMiniLogFeed entries={remoteLogs[WEEK_SECTION] ?? []} />
+          <TrackerMiniLogFeed entries={remoteLogs[WEEK_SECTION] ?? []} showActor />
         </div>
       )}
       <section style={{ display: "grid", gap: 14 }}>
