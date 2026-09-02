@@ -1181,7 +1181,6 @@ export default function TrackerPanel({
       if (res.updated?.length) {
         setChallenges((prev) => patchChallengesFromReport(prev, res.updated!));
       }
-      await loadProgress();
       await emitLog(
         globalSection(cat.actionCode),
         cat.actionCode,
@@ -1248,7 +1247,6 @@ export default function TrackerPanel({
     if (winRes?.updated?.length) {
       setChallenges((prev) => patchChallengesFromReport(prev, winRes.updated!));
     }
-    await loadProgress();
     const { error: endErr } = await supabase.rpc("end_active_match");
     setBusyMatch(false);
     if (endErr) alert(endErr.message);
