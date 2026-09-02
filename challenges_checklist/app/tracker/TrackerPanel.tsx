@@ -248,6 +248,11 @@ function deriveCategoryView(
     for (const l of namedLocations) locs.set(l.id, l);
   }
 
+  // punto caliente: cualquier POI con nombre + condición marcable
+  if (cat.rules.some((r) => r.conds.some((c) => c.key === "hot_spot"))) {
+    for (const l of namedLocations) locs.set(l.id, l);
+  }
+
   const byLabel = (a: { label: string }, b: { label: string }) =>
     a.label.localeCompare(b.label);
 
@@ -561,14 +566,12 @@ export default function TrackerPanel({
 
   const weekIds = useMemo(() => weeks.map((w) => w.id), [weeks]);
   const weekIdSet = useMemo(() => new Set(weekIds), [weekIds]);
-  const weekFilter = useMemo(
-    () => (weekIds.length ? `week_id=in.(${weekIds.join(",")})` : undefined),
-    [weekIds]
-  );
   const challengeIds = useMemo(
     () => challenges.map((c) => c.id),
     [challenges]
   );
+  const seasonLabel =
+    seasons.find((s) => s.code === seasonCode)?.display_name ?? seasonCode;
 
   const selectedWeekIdSet = useMemo(() => {
     return new Set(
@@ -649,17 +652,6 @@ export default function TrackerPanel({
     setDistinctProgress(bundle.distinctProgress);
   }, [supabase, weekIds, challengeIds]);
 
-  const loadProgressDebouncedRef = useRef(debounce(() => {
-    void loadProgress();
-  }, 120));
-
-  useEffect(() => {
-    loadProgressDebouncedRef.current = debounce(() => {
-      void loadProgress();
-    }, 120);
-    return () => loadProgressDebouncedRef.current.cancel();
-  }, [loadProgress]);
-
   const refreshChallengeScalars = useCallback(
     async (challengeId: string) => {
       const { data, error } = await supabase
@@ -686,10 +678,9 @@ export default function TrackerPanel({
 
   const syncManualChallenge = useCallback(
     async (challengeId: string) => {
-      await refreshChallengeScalars(challengeId);
-      loadProgressDebouncedRef.current();
+      await Promise.all([refreshChallengeScalars(challengeId), loadProgress()]);
     },
-    [refreshChallengeScalars]
+    [refreshChallengeScalars, loadProgress]
   );
 
   const loadFullChallenges = useCallback(async () => {
@@ -743,12 +734,7 @@ export default function TrackerPanel({
       .channel("tracker-realtime")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "challenges",
-          ...(weekFilter ? { filter: weekFilter } : {}),
-        },
+        { event: "*", schema: "public", table: "challenges" },
         (payload) => {
           const eventType = payload.eventType as "INSERT" | "UPDATE" | "DELETE";
           if (eventType === "INSERT") {
@@ -813,7 +799,7 @@ export default function TrackerPanel({
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekIds.join(","), weekFilter]);
+  }, [weekIds.join(",")]);
 
   useEffect(() => {
     if (trackerView !== "track") return;
@@ -1195,6 +1181,7 @@ export default function TrackerPanel({
       if (res.updated?.length) {
         setChallenges((prev) => patchChallengesFromReport(prev, res.updated!));
       }
+      await loadProgress();
       await emitLog(
         globalSection(cat.actionCode),
         cat.actionCode,
@@ -1261,6 +1248,7 @@ export default function TrackerPanel({
     if (winRes?.updated?.length) {
       setChallenges((prev) => patchChallengesFromReport(prev, winRes.updated!));
     }
+    await loadProgress();
     const { error: endErr } = await supabase.rpc("end_active_match");
     setBusyMatch(false);
     if (endErr) alert(endErr.message);
@@ -1315,7 +1303,7 @@ export default function TrackerPanel({
 
     if (error) alert(error.message);
     else {
-      loadProgressDebouncedRef.current();
+      await loadProgress();
       await emitLog(WEEK_SECTION, null, {
         message: `🔄 Progreso reiniciado: ${challenge.description}`,
         action: {
@@ -1797,9 +1785,11 @@ export default function TrackerPanel({
           <>
             {isAdmin && (
               <AdminBulkMenu
+                seasonCode={seasonCode}
+                seasonLabel={seasonLabel}
+                hasPrestige={hasPrestige}
                 onDone={() => {
-                  loadMatch();
-                  void loadFullChallenges();
+                  void reloadAllProgress();
                   setRemoteLogs({});
                   window.dispatchEvent(new Event("tracker-logs-cleared"));
                 }}

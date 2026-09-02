@@ -21,6 +21,9 @@ type ActionDef = {
   description: string;
   confirm: string;
   destructive?: boolean;
+  prestigeOnly?: boolean;
+  /** Si true, la RPC recibe p_season_code (db/54). */
+  seasonScoped?: boolean;
 };
 
 const ACTIONS: ActionDef[] = [
@@ -28,47 +31,57 @@ const ACTIONS: ActionDef[] = [
     id: "reset_all",
     label: "Reiniciar todo",
     rpc: "reset_all_progress",
-    description: "Borra todo el progreso y todas las partidas",
-    confirm: "Se reiniciará TODO: normales, prestigios y partidas. ¿Continuar?",
+    description: "Borra el progreso de la temporada seleccionada",
+    confirm:
+      "Se reiniciará TODO el progreso de esta temporada (normales y prestigios). Las partidas activas no se borran. ¿Continuar?",
     destructive: true,
+    seasonScoped: true,
   },
   {
     id: "complete_normals",
     label: "Completar normales",
     rpc: "complete_normals",
-    description: "Marca todos los desafíos normales como hechos",
-    confirm: "¿Completar todos los desafíos normales de la temporada?",
+    description: "Marca los desafíos normales de esta temporada como hechos",
+    confirm: "¿Completar todos los desafíos normales de esta temporada?",
+    seasonScoped: true,
   },
   {
     id: "complete_prestiges",
     label: "Completar prestigios",
     rpc: "complete_prestiges",
-    description: "Marca todos los prestigios como hechos",
-    confirm: "¿Completar todos los desafíos de prestigio?",
+    description: "Marca los prestigios de esta temporada como hechos",
+    confirm: "¿Completar todos los desafíos de prestigio de esta temporada?",
+    prestigeOnly: true,
+    seasonScoped: true,
   },
   {
     id: "reset_normals",
     label: "Reiniciar normales",
     rpc: "reset_normals",
-    description: "Pone a cero el progreso de los normales",
-    confirm: "¿Reiniciar el progreso de todos los desafíos normales?",
+    description: "Pone a cero el progreso normal de esta temporada",
+    confirm: "¿Reiniciar el progreso de los desafíos normales de esta temporada?",
     destructive: true,
+    seasonScoped: true,
   },
   {
     id: "reset_prestiges",
     label: "Reiniciar prestigios",
     rpc: "reset_prestiges",
-    description: "Pone a cero el progreso de los prestigios",
-    confirm: "¿Reiniciar el progreso de todos los prestigios?",
+    description: "Pone a cero el progreso de prestigio de esta temporada",
+    confirm: "¿Reiniciar el progreso de los prestigios de esta temporada?",
     destructive: true,
+    prestigeOnly: true,
+    seasonScoped: true,
   },
   {
     id: "reset_matches",
     label: "Reiniciar partidas",
     rpc: "reset_matches",
-    description: "Elimina partidas y progreso por partida activo",
-    confirm: "¿Eliminar todas las partidas y desbloquear fases bloqueadas por partida?",
+    description: "Limpia progreso por partida de esta temporada",
+    confirm:
+      "¿Limpiar el progreso ligado a partidas de esta temporada y desbloquear fases bloqueadas?",
     destructive: true,
+    seasonScoped: true,
   },
   {
     id: "clear_tracker_logs",
@@ -82,11 +95,13 @@ const ACTIONS: ActionDef[] = [
 
 function ConfirmOverlay({
   action,
+  seasonLabel,
   busy,
   onConfirm,
   onCancel,
 }: {
   action: ActionDef;
+  seasonLabel: string;
   busy: boolean;
   onConfirm: () => void;
   onCancel: () => void;
@@ -141,6 +156,16 @@ function ConfirmOverlay({
         >
           {action.label}
         </h2>
+        <p
+          style={{
+            margin: "0 0 8px",
+            fontFamily: bodyFont,
+            fontSize: fs(12, 15),
+            color: fnt.textMuted,
+          }}
+        >
+          Temporada: <strong style={{ color: fnt.textDim }}>{seasonLabel}</strong>
+        </p>
         <p
           style={{
             margin: "0 0 22px",
@@ -204,12 +229,26 @@ function ConfirmOverlay({
   );
 }
 
-export default function AdminBulkMenu({ onDone }: { onDone: () => void }) {
+export default function AdminBulkMenu({
+  seasonCode,
+  seasonLabel,
+  hasPrestige = true,
+  onDone,
+}: {
+  seasonCode: string;
+  seasonLabel: string;
+  hasPrestige?: boolean;
+  onDone: () => void;
+}) {
   const supabase = createClient();
   const wrapRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [pending, setPending] = useState<ActionDef | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const visibleActions = ACTIONS.filter(
+    (a) => !a.prestigeOnly || hasPrestige
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -225,7 +264,10 @@ export default function AdminBulkMenu({ onDone }: { onDone: () => void }) {
   async function runAction() {
     if (!pending) return;
     setBusy(true);
-    const { error } = await supabase.rpc(pending.rpc);
+    const { error } = await supabase.rpc(
+      pending.rpc,
+      pending.seasonScoped ? { p_season_code: seasonCode } : {}
+    );
     setBusy(false);
     setPending(null);
     if (error) {
@@ -281,7 +323,7 @@ export default function AdminBulkMenu({ onDone }: { onDone: () => void }) {
               boxShadow: "0 12px 32px rgba(0,0,0,0.35)",
             }}
           >
-            {ACTIONS.map((a) => (
+            {visibleActions.map((a) => (
               <button
                 key={a.id}
                 type="button"
@@ -337,6 +379,7 @@ export default function AdminBulkMenu({ onDone }: { onDone: () => void }) {
       {pending && (
         <ConfirmOverlay
           action={pending}
+          seasonLabel={seasonLabel}
           busy={busy}
           onConfirm={runAction}
           onCancel={() => !busy && setPending(null)}
