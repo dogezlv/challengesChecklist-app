@@ -367,14 +367,14 @@ begin
   r := pg_temp.rule9(c, 'kill');
 
   c := pg_temp.ch9(5, 'Fase 1 de 3: Completa una vuelta a la pista de carreras del desierto', 'simple', 'count', 'any_match', 1, null, 'S9W5 — Pistas de carreras', 1);
-  r := pg_temp.rule9(c, 'visit', null, null, null, null, 'desert_race_track');
-  perform pg_temp.cond9(r, 'race_track_lap', 'Vuelta completa a la pista');
+  r := pg_temp.rule9(c, 'misc');
+  perform pg_temp.cond9(r, 'race_track_lap_desert', '🏁 Vuelta completa — pista del desierto');
   c := pg_temp.ch9(5, 'Fase 2 de 3: Completa una vuelta a la pista de carreras nevada', 'simple', 'count', 'any_match', 1, null, 'S9W5 — Pistas de carreras', 2);
-  r := pg_temp.rule9(c, 'visit', null, null, null, null, 'snowy_race_track');
-  perform pg_temp.cond9(r, 'race_track_lap', 'Vuelta completa a la pista');
+  r := pg_temp.rule9(c, 'misc');
+  perform pg_temp.cond9(r, 'race_track_lap_snow', '🏁 Vuelta completa — pista nevada');
   c := pg_temp.ch9(5, 'Fase 3 de 3: Completa una vuelta a la pista de carreras de pradera', 'simple', 'count', 'any_match', 1, null, 'S9W5 — Pistas de carreras', 3);
-  r := pg_temp.rule9(c, 'visit', null, null, null, null, 'grasslands_race_track');
-  perform pg_temp.cond9(r, 'race_track_lap', 'Vuelta completa a la pista');
+  r := pg_temp.rule9(c, 'misc');
+  perform pg_temp.cond9(r, 'race_track_lap_grasslands', '🏁 Vuelta completa — pista de pradera');
 
   c := pg_temp.ch9(5, 'Coloca una trampa en diferentes partidas', 'progress', 'count', 'different_matches', 5);
   r := pg_temp.rule9(c, 'use', 'trap');
@@ -410,11 +410,14 @@ begin
   r := pg_temp.rule9(c, 'damage', null, 'smg');
 
   c := pg_temp.ch9(6, 'Fase 1 de 3: Registra cofres en un punto caliente', 'progress', 'count', 'any_match', 3, null, 'S9W6 — Punto caliente', 1);
-  r := pg_temp.rule9(c, 'search', null, null, 'chest', null, 'hot_spot');
+  r := pg_temp.rule9(c, 'search', null, null, 'chest');
+  perform pg_temp.cond9(r, 'hot_spot', '🔥 Punto caliente');
   c := pg_temp.ch9(6, 'Fase 2 de 3: Registra cajas de munición en un punto caliente', 'progress', 'count', 'any_match', 3, null, 'S9W6 — Punto caliente', 2);
-  r := pg_temp.rule9(c, 'search', null, null, 'ammo_box', null, 'hot_spot');
+  r := pg_temp.rule9(c, 'search', null, null, 'ammo_box');
+  perform pg_temp.cond9(r, 'hot_spot', '🔥 Punto caliente');
   c := pg_temp.ch9(6, 'Fase 3 de 3: Consigue una eliminación en un punto caliente', 'simple', 'count', 'any_match', 1, null, 'S9W6 — Punto caliente', 3);
-  r := pg_temp.rule9(c, 'kill', null, null, null, null, 'hot_spot');
+  r := pg_temp.rule9(c, 'kill');
+  perform pg_temp.cond9(r, 'hot_spot', '🔥 Punto caliente');
 
   c := pg_temp.ch9(6, 'Inflige daño a un vehículo conducido por un oponente', 'progress', 'value', 'any_match', 200);
   r := pg_temp.rule9(c, 'damage', null, null, null, 'vehicle');

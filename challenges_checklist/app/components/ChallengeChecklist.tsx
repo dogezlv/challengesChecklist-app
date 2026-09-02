@@ -75,10 +75,6 @@ export default function ChallengeChecklist({
 
   const weekIds = useMemo(() => weeks.map((w) => w.id), [weeks]);
   const weekIdSet = useMemo(() => new Set(weekIds), [weekIds]);
-  const weekFilter = useMemo(
-    () => (weekIds.length ? `week_id=in.(${weekIds.join(",")})` : undefined),
-    [weekIds]
-  );
 
   // Realtime: en vez de recargar TODA la temporada en cada cambio (lo que
   // multiplicaría las consultas por cada espectador anónimo del stream),
@@ -88,12 +84,7 @@ export default function ChallengeChecklist({
       .channel("challenges-realtime")
       .on(
         "postgres_changes",
-        {
-          event: "*",
-          schema: "public",
-          table: "challenges",
-          ...(weekFilter ? { filter: weekFilter } : {}),
-        },
+        { event: "*", schema: "public", table: "challenges" },
         (payload) => {
           setChallenges((prev) =>
             applyChallengesRealtimeEvent(
@@ -111,7 +102,7 @@ export default function ChallengeChecklist({
     return () => {
       supabase.removeChannel(channel);
     };
-  }, [supabase, weekIdSet, weekFilter]);
+  }, [supabase, weekIdSet]);
 
   // Modo prestigio: tiñe el fondo animado (PageBackground) con el color de la
   // semana mediante un atributo + variable CSS en <html>. Se nota que estás en
