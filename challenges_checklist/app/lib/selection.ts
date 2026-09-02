@@ -6,6 +6,8 @@ export type Season = {
   display_name: string;
   display_name_en?: string | null;
   is_locked?: boolean;
+  /** Si la temporada tiene desafíos de prestigio (muestra toggle en UI). */
+  has_prestige?: boolean;
 };
 
 export type Week = {

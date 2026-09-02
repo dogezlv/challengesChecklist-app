@@ -168,19 +168,23 @@ export function ruleProgressHit(
 /** Progreso de reglas/ubicaciones distintas para desafíos de las semanas cargadas. */
 export async function fetchProgressOnly(
   supabase: SupabaseClient,
-  weekIds: string[]
+  weekIds: string[],
+  knownChallengeIds?: string[]
 ): Promise<{ ruleProgress: RuleProgressRow[]; distinctProgress: DistinctRow[] }> {
   if (!weekIds.length) {
     return { ruleProgress: [], distinctProgress: [] };
   }
 
-  const { data: challengeRows, error: chErr } = await supabase
-    .from("challenges")
-    .select("id")
-    .in("week_id", weekIds);
-  if (chErr) throw new Error(chErr.message);
+  let challengeIds = knownChallengeIds;
+  if (!challengeIds?.length) {
+    const { data: challengeRows, error: chErr } = await supabase
+      .from("challenges")
+      .select("id")
+      .in("week_id", weekIds);
+    if (chErr) throw new Error(chErr.message);
+    challengeIds = (challengeRows ?? []).map((r) => r.id);
+  }
 
-  const challengeIds = (challengeRows ?? []).map((r) => r.id);
   if (!challengeIds.length) {
     return { ruleProgress: [], distinctProgress: [] };
   }

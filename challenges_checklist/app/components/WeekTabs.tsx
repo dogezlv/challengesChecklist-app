@@ -1,6 +1,6 @@
 "use client";
 
-import type { ReactNode } from "react";
+import { memo, useMemo, type ReactNode } from "react";
 import type { Season, Week } from "../lib/selection";
 import { fnt, fs, pillTab, titleFont } from "../lib/theme";
 
@@ -29,7 +29,7 @@ type WeekTabsMulti = SeasonWeekBase & {
 
 // Pestañas estilo dashboard Fortnite (Season X): botones de temporada con su
 // arte oficial y píldoras de semana tipo EVENT / MISSIONS / STYLE.
-export default function WeekTabs(props: WeekTabsSingle | WeekTabsMulti) {
+function WeekTabs(props: WeekTabsSingle | WeekTabsMulti) {
   if (props.multiSelect) {
     return <WeekTabsMultiView {...props} />;
   }
@@ -46,7 +46,7 @@ function WeekTabsMultiView({
   onSelectAllWeeks,
   onSelectNoneWeeks,
 }: WeekTabsMulti) {
-  const selectedSet = new Set(selectedWeeks);
+  const selectedSet = useMemo(() => new Set(selectedWeeks), [selectedWeeks]);
   return (
     <WeekTabsLayout
       seasons={seasons}
@@ -198,3 +198,5 @@ function WeekTabsLayout({
     </div>
   );
 }
+
+export default memo(WeekTabs);
