@@ -28,12 +28,16 @@ export default async function AdminPage() {
     locations,
     challenges,
     challengeLines,
+    seasons,
+    weeks,
   ] = await Promise.all([
     supabase.from("action_types").select("*").order("display_name"),
     supabase.from("tags").select("*").order("display_name"),
     supabase.from("locations").select("*").order("display_name"),
     supabase.from("challenges").select("*").order("created_at"),
     supabase.from("challenge_lines").select("*").order("created_at"),
+    supabase.from("seasons").select("*").order("code"),
+    supabase.from("challenge_weeks").select("*").order("week_number"),
   ]);
 
   const gameObjects = await supabase
@@ -58,6 +62,8 @@ export default async function AdminPage() {
       locations={locations.data ?? []}
       challenges={challenges.data ?? []}
       challengeLines={challengeLines.data ?? []}
+      seasons={seasons.data ?? []}
+      weeks={weeks.data ?? []}
     />
   );
 }

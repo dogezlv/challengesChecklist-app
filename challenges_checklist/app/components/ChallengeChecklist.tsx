@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useDeferredValue, useEffect, useMemo, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/utils/supabase/client";
 import MissionRow from "./MissionRow";
@@ -10,7 +10,7 @@ import IncompleteOnlyToggle from "./IncompleteOnlyToggle";
 import PrestigeViewToggle from "./PrestigeViewToggle";
 import WeekTabs from "./WeekTabs";
 import BattlePassBanner from "./BattlePassBanner";
-import { fnt, fs, panel, weekAccent } from "../lib/theme";
+import { fnt, fs, panel, panelClassName, weekAccent } from "../lib/theme";
 import type { Season, Week } from "../lib/selection";
 import {
   readTrackerViewPrefs,
@@ -42,7 +42,7 @@ export default function ChallengeChecklist({
   seasonCode: string;
   initialWeekNumber: number;
 }) {
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
   const [challenges, setChallenges] = useState(initialChallenges);
   const [weekTab, setWeekTab] = useState(initialWeekNumber);
@@ -52,6 +52,8 @@ export default function ChallengeChecklist({
   // modo prestigio: muestra los desafíos extra (más difíciles) con tema teal
   const [prestige, setPrestige] = useState(false);
   const skipPrestigePersist = useRef(true);
+  const hasPrestige =
+    seasons.find((s) => s.code === seasonCode)?.has_prestige ?? false;
 
   useEffect(() => {
     skipPrestigePersist.current = true;
@@ -59,9 +61,9 @@ export default function ChallengeChecklist({
       seasonCode,
       weeks.map((w) => w.week_number)
     );
-    setPrestige(prestigeView);
+    setPrestige(hasPrestige ? prestigeView : false);
     skipPrestigePersist.current = false;
-  }, [seasonCode, weeks]);
+  }, [seasonCode, weeks, hasPrestige]);
 
   // re-sincroniza cuando el servidor manda otra temporada (ajuste de estado
   // durante el render comparando la prop anterior, sin efecto)
@@ -73,6 +75,10 @@ export default function ChallengeChecklist({
 
   const weekIds = useMemo(() => weeks.map((w) => w.id), [weeks]);
   const weekIdSet = useMemo(() => new Set(weekIds), [weekIds]);
+  const weekFilter = useMemo(
+    () => (weekIds.length ? `week_id=in.(${weekIds.join(",")})` : undefined),
+    [weekIds]
+  );
 
   // Realtime: en vez de recargar TODA la temporada en cada cambio (lo que
   // multiplicaría las consultas por cada espectador anónimo del stream),
@@ -82,7 +88,12 @@ export default function ChallengeChecklist({
       .channel("challenges-realtime")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "challenges" },
+        {
+          event: "*",
+          schema: "public",
+          table: "challenges",
+          ...(weekFilter ? { filter: weekFilter } : {}),
+        },
         (payload) => {
           setChallenges((prev) =>
             applyChallengesRealtimeEvent(
@@ -100,8 +111,7 @@ export default function ChallengeChecklist({
     return () => {
       supabase.removeChannel(channel);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekIdSet]);
+  }, [supabase, weekIdSet, weekFilter]);
 
   // Modo prestigio: tiñe el fondo animado (PageBackground) con el color de la
   // semana mediante un atributo + variable CSS en <html>. Se nota que estás en
@@ -119,85 +129,147 @@ export default function ChallengeChecklist({
     };
   }, [prestige, weekTab]);
 
-  const query = normalizeText(search.trim());
+  const deferredSearch = useDeferredValue(search);
+  const query = useMemo(
+    () => normalizeText(deferredSearch.trim()),
+    [deferredSearch]
+  );
 
-  // de cada línea de fases mostramos SOLO la fase actual: la primera
-  // incompleta o, si ya están todas completas, la última (como completada).
-  // Así las fases ya superadas no se acumulan en la lista.
-  function currentPhaseIds(weekChalls: Challenge[]) {
-    const byLine = new Map<string, Challenge[]>();
-    for (const c of weekChalls) {
-      if (!c.line_id) continue;
-      const list = byLine.get(c.line_id) ?? [];
+  const challengesByWeek = useMemo(() => {
+    const map = new Map<string, Challenge[]>();
+    for (const c of challenges) {
+      if (!c.week_id) continue;
+      const list = map.get(c.week_id) ?? [];
       list.push(c);
-      byLine.set(c.line_id, list);
+      map.set(c.week_id, list);
     }
-    const show = new Set<string>();
-    byLine.forEach((list) => {
-      const sorted = [...list].sort(
-        (a, b) => (a.phase_order ?? 0) - (b.phase_order ?? 0)
+    return map;
+  }, [challenges]);
+
+  const phaseShowByWeek = useMemo(() => {
+    const out = new Map<string, Set<string>>();
+    for (const [weekId, weekChalls] of challengesByWeek) {
+      const byLine = new Map<string, Challenge[]>();
+      for (const c of weekChalls) {
+        if (!c.line_id || c.is_meta) continue;
+        const list = byLine.get(c.line_id) ?? [];
+        list.push(c);
+        byLine.set(c.line_id, list);
+      }
+      const show = new Set<string>();
+      byLine.forEach((list) => {
+        const sorted = [...list].sort(
+          (a, b) => (a.phase_order ?? 0) - (b.phase_order ?? 0)
+        );
+        const current =
+          sorted.find((c) => !c.is_completed) ?? sorted[sorted.length - 1];
+        if (current) show.add(current.id);
+      });
+      out.set(weekId, show);
+    }
+    return out;
+  }, [challengesByWeek]);
+
+  const weekUnlockedMap = useMemo(() => {
+    const out = new Map<string, boolean>();
+    for (const week of weeks) {
+      const weekChalls = challengesByWeek.get(week.id) ?? [];
+      const normals = weekChalls.filter((c) => !c.is_meta && !c.is_prestige);
+      out.set(
+        week.id,
+        normals.length > 0 &&
+          normals.every((c) => c.is_completed && !c.completed_in_match)
       );
-      const current =
-        sorted.find((c) => !c.is_completed) ?? sorted[sorted.length - 1];
-      if (current) show.add(current.id);
-    });
-    return show;
-  }
+    }
+    return out;
+  }, [weeks, challengesByWeek]);
 
-  function visibleWeekChallenges(week: Week) {
-    const weekChalls = challenges.filter(
-      (c) => c.week_id === week.id && !c.is_meta && !!c.is_prestige === prestige
-    );
-    const phaseShow = currentPhaseIds(weekChalls);
-    return sortWeekChallenges(weekChalls).filter(
-      (c) =>
-        (!onlyIncomplete || !c.is_completed) &&
-        (!c.line_id || phaseShow.has(c.id)) &&
-        (!query || normalizeText(c.description).includes(query))
-    );
-  }
+  const weekStatsMap = useMemo(() => {
+    const out = new Map<string, { total: number; done: number; percent: number }>();
+    for (const week of weeks) {
+      const weekChalls = challengesByWeek.get(week.id) ?? [];
+      const normals = weekChalls.filter((c) => !c.is_meta && !c.is_prestige);
+      const prest = weekChalls.filter((c) => !c.is_meta && c.is_prestige);
+      const nDone = normals.filter((c) => c.is_completed).length;
+      const pDone = prest.filter((c) => c.is_completed).length;
+      const nPct = normals.length ? (nDone / normals.length) * 100 : 0;
+      const pPct = prest.length ? (pDone / prest.length) * 100 : 0;
+      out.set(week.id, {
+        total: normals.length,
+        done: nDone,
+        percent: nPct + pPct,
+      });
+    }
+    return out;
+  }, [weeks, challengesByWeek]);
 
-  // ¿el prestigio de la semana está desbloqueado? Todos los normales hechos Y
-  // ninguno completado en la partida AÚN activa (completed_in_match no nulo):
-  // si la semana se cierra dentro de una partida, el prestigio se desbloquea
-  // recién a partir de la SIGUIENTE (end_active_match limpia la columna).
-  function weekUnlocked(week: Week) {
-    const normals = challenges.filter(
-      (c) => c.week_id === week.id && !c.is_meta && !c.is_prestige
-    );
-    return (
-      normals.length > 0 &&
-      normals.every((c) => c.is_completed && !c.completed_in_match)
-    );
-  }
-
-  function weekMetaChallenge(week: Week) {
-    const meta = challenges.find((c) => c.week_id === week.id && c.is_meta);
-    if (!meta) return null;
-    if (onlyIncomplete && meta.is_completed) return null;
-    if (query && !normalizeText(meta.description).includes(query)) return null;
-    return meta;
-  }
-
-  // Porcentaje de la semana: los desafíos NORMALES llenan 0–100% y los de
-  // PRESTIGIO suben de 100% a 200% (los prestigios solo se completan tras los
-  // normales, así que su aporte llega después). El banner muestra hasta 200%.
-  function weekStats(week: Week) {
-    const normals = challenges.filter(
-      (c) => c.week_id === week.id && !c.is_meta && !c.is_prestige
-    );
-    const prest = challenges.filter(
-      (c) => c.week_id === week.id && !c.is_meta && c.is_prestige
-    );
-    const nDone = normals.filter((c) => c.is_completed).length;
-    const pDone = prest.filter((c) => c.is_completed).length;
-    const nPct = normals.length ? (nDone / normals.length) * 100 : 0;
-    const pPct = prest.length ? (pDone / prest.length) * 100 : 0;
-    return { total: normals.length, done: nDone, percent: nPct + pPct };
-  }
+  const visibleByWeek = useMemo(() => {
+    const out = new Map<
+      string,
+      { items: Challenge[]; meta: Challenge | null }
+    >();
+    for (const week of weeks) {
+      const weekChalls = challengesByWeek.get(week.id) ?? [];
+      const phaseShow = phaseShowByWeek.get(week.id) ?? new Set<string>();
+      const items = sortWeekChallenges(
+        weekChalls.filter(
+          (c) => !c.is_meta && !!c.is_prestige === prestige
+        )
+      ).filter(
+        (c) =>
+          (!onlyIncomplete || !c.is_completed) &&
+          (!c.line_id || phaseShow.has(c.id)) &&
+          (!query || normalizeText(c.description).includes(query))
+      );
+      const metaRow = weekChalls.find((c) => c.is_meta);
+      const meta =
+        prestige || !metaRow
+          ? null
+          : onlyIncomplete && metaRow.is_completed
+            ? null
+            : query && !normalizeText(metaRow.description).includes(query)
+              ? null
+              : metaRow;
+      out.set(week.id, { items, meta });
+    }
+    return out;
+  }, [
+    weeks,
+    challengesByWeek,
+    phaseShowByWeek,
+    prestige,
+    onlyIncomplete,
+    query,
+  ]);
 
   const tabWeek = weeks.find((w) => w.week_number === weekTab) ?? weeks[0];
   const viewWeeks = showAll ? weeks : tabWeek ? [tabWeek] : [];
+
+  const onSelectWeek = useCallback(
+    (n: number) => {
+      setShowAll(false);
+      setWeekTab(n);
+      window.history.replaceState(null, "", `/?season=${seasonCode}&week=${n}`);
+    },
+    [seasonCode]
+  );
+
+  const onSelectSeason = useCallback(
+    (code: string) => router.push(`/?season=${code}&week=1`),
+    [router]
+  );
+
+  const onSelectAll = useCallback(() => setShowAll(true), []);
+
+  const togglePrestige = useCallback(() => {
+    setPrestige((p) => {
+      const next = !p;
+      if (!skipPrestigePersist.current) {
+        writeTrackerViewPrefs(seasonCode, { prestige: next });
+      }
+      return next;
+    });
+  }, [seasonCode]);
 
   return (
     <div style={{ display: "grid", gap: 14 }}>
@@ -207,13 +279,9 @@ export default function ChallengeChecklist({
         seasonCode={seasonCode}
         weekNumber={weekTab}
         allSelected={showAll}
-        onSelectAll={() => setShowAll(true)}
-        onSelectSeason={(code) => router.push(`/?season=${code}&week=1`)}
-        onSelectWeek={(n) => {
-          setShowAll(false);
-          setWeekTab(n);
-          window.history.replaceState(null, "", `/?season=${seasonCode}&week=${n}`);
-        }}
+        onSelectAll={onSelectAll}
+        onSelectSeason={onSelectSeason}
+        onSelectWeek={onSelectWeek}
       />
 
       <div
@@ -235,18 +303,9 @@ export default function ChallengeChecklist({
             }
           />
         </div>
-        <PrestigeViewToggle
-          active={prestige}
-          onToggle={() =>
-            setPrestige((p) => {
-              const next = !p;
-              if (!skipPrestigePersist.current) {
-                writeTrackerViewPrefs(seasonCode, { prestige: next });
-              }
-              return next;
-            })
-          }
-        />
+        {hasPrestige && (
+          <PrestigeViewToggle active={prestige} onToggle={togglePrestige} />
+        )}
         <IncompleteOnlyToggle
           active={onlyIncomplete}
           onChange={setOnlyIncomplete}
@@ -254,15 +313,19 @@ export default function ChallengeChecklist({
       </div>
 
       {viewWeeks.map((week) => {
-        const items = visibleWeekChallenges(week);
-        const meta = prestige ? null : weekMetaChallenge(week);
+        const { items, meta } = visibleByWeek.get(week.id) ?? {
+          items: [],
+          meta: null,
+        };
         if (showAll && items.length === 0 && !meta) return null;
 
-        const stats = weekStats(week);
-        // el color es SIEMPRE el de la semana; el prestigio NO lo vuelve teal,
-        // solo "imbuye" más el recuadro (glow + borde más intenso)
+        const stats = weekStatsMap.get(week.id) ?? {
+          total: 0,
+          done: 0,
+          percent: 0,
+        };
         const accent = weekAccent(week.week_number);
-        const unlocked = weekUnlocked(week);
+        const unlocked = weekUnlockedMap.get(week.id) ?? false;
         const rows = meta ? [meta, ...items] : items;
 
         return (
@@ -292,7 +355,10 @@ export default function ChallengeChecklist({
               flush
             />
 
-            <div style={{ ...panel, borderRadius: 0, border: "none", padding: `${fs(6, 12)} ${fs(8, 18)}` }}>
+            <div
+              className={panelClassName}
+              style={{ ...panel, borderRadius: 0, border: "none", padding: `${fs(6, 12)} ${fs(8, 18)}` }}
+            >
 
               {rows.map((c, i) => (
                 <MissionRow
@@ -325,10 +391,13 @@ export default function ChallengeChecklist({
       })}
 
       {(query || onlyIncomplete) &&
-        viewWeeks.every((w) => visibleWeekChallenges(w).length === 0 && !weekMetaChallenge(w)) && (
+        viewWeeks.every((w) => {
+          const v = visibleByWeek.get(w.id);
+          return !v?.items.length && !v?.meta;
+        }) && (
           <p style={{ color: fnt.textDim, margin: 0 }}>
-            {query
-              ? `Ningún desafío coincide con "${search}".`
+              {query
+                ? `Ningún desafío coincide con "${deferredSearch}".`
               : "No quedan desafíos pendientes en la selección actual."}
           </p>
         )}

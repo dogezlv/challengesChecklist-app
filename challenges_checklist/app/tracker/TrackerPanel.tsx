@@ -8,6 +8,7 @@ import AdminBulkMenu from "../components/AdminBulkMenu";
 import { getMissionVisual } from "../lib/missionAssets";
 import LogoutButton from "../components/LogoutButton";
 import MissionRow from "../components/MissionRow";
+import MissionProgressDisplay from "../components/MissionProgressDisplay";
 import MissionProgressSlider from "../components/MissionProgressSlider";
 import PageBackground from "../components/PageBackground";
 import SearchBox from "../components/SearchBox";
@@ -20,7 +21,7 @@ import {
   TrackerLocalResultFeed,
   TrackerMiniLogFeed,
 } from "../components/TrackerMiniLogFeed";
-import { contentWrap, fnt, fs, pageMain, panel, pillTab, titleFont, weekAccent, yellowButton } from "../lib/theme";
+import { contentWrap, fnt, fs, pageMain, panel, panelClassName, pillTab, titleFont, weekAccent, yellowButton } from "../lib/theme";
 import {
   globalSection,
   groupRecentLogsBySection,
@@ -414,7 +415,7 @@ export default function TrackerPanel({
   initialLite?: boolean;
 }) {
   const { lite } = useLiteMode(initialLite);
-  const supabase = createClient();
+  const supabase = useMemo(() => createClient(), []);
   const router = useRouter();
 
   const objectTagSet = useMemo(() => {
@@ -440,8 +441,6 @@ export default function TrackerPanel({
   const [busyAction, setBusyAction] = useState<string | null>(null);
   const [busyMatch, setBusyMatch] = useState(false);
   const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({});
-  /** Valor en vivo del slider antes de soltar (actualiza X/Y y barra). */
-  const [sliderPreview, setSliderPreview] = useState<Record<string, number>>({});
   const [busyRule, setBusyRule] = useState<string | null>(null);
   const [busyReload, setBusyReload] = useState(false);
   const [cannonArrivalByChallenge, setCannonArrivalByChallenge] = useState<
@@ -562,6 +561,14 @@ export default function TrackerPanel({
 
   const weekIds = useMemo(() => weeks.map((w) => w.id), [weeks]);
   const weekIdSet = useMemo(() => new Set(weekIds), [weekIds]);
+  const weekFilter = useMemo(
+    () => (weekIds.length ? `week_id=in.(${weekIds.join(",")})` : undefined),
+    [weekIds]
+  );
+  const challengeIds = useMemo(
+    () => challenges.map((c) => c.id),
+    [challenges]
+  );
 
   const selectedWeekIdSet = useMemo(() => {
     return new Set(
@@ -573,6 +580,9 @@ export default function TrackerPanel({
 
   const hasWeekFilter = selectedWeekNumbers.size > 0;
 
+  const hasPrestige =
+    seasons.find((s) => s.code === seasonCode)?.has_prestige ?? false;
+
   useEffect(() => {
     const valid = weeks.map((w) => w.week_number);
     const { selectedWeeks, prestigeView: pv } = readTrackerViewPrefs(
@@ -580,8 +590,8 @@ export default function TrackerPanel({
       valid
     );
     setSelectedWeekNumbers(selectedWeeks);
-    setPrestigeView(pv);
-  }, [seasonCode, weeks]);
+    setPrestigeView(hasPrestige ? pv : false);
+  }, [seasonCode, weeks, hasPrestige]);
 
   const toggleWeekSelection = useCallback(
     (weekNumber: number) => {
@@ -634,10 +644,21 @@ export default function TrackerPanel({
   }, [challenges]);
 
   const loadProgress = useCallback(async () => {
-    const bundle = await fetchProgressOnly(supabase, weekIds);
+    const bundle = await fetchProgressOnly(supabase, weekIds, challengeIds);
     setRuleProgress(bundle.ruleProgress);
     setDistinctProgress(bundle.distinctProgress);
-  }, [supabase, weekIds]);
+  }, [supabase, weekIds, challengeIds]);
+
+  const loadProgressDebouncedRef = useRef(debounce(() => {
+    void loadProgress();
+  }, 120));
+
+  useEffect(() => {
+    loadProgressDebouncedRef.current = debounce(() => {
+      void loadProgress();
+    }, 120);
+    return () => loadProgressDebouncedRef.current.cancel();
+  }, [loadProgress]);
 
   const refreshChallengeScalars = useCallback(
     async (challengeId: string) => {
@@ -665,9 +686,10 @@ export default function TrackerPanel({
 
   const syncManualChallenge = useCallback(
     async (challengeId: string) => {
-      await Promise.all([refreshChallengeScalars(challengeId), loadProgress()]);
+      await refreshChallengeScalars(challengeId);
+      loadProgressDebouncedRef.current();
     },
-    [refreshChallengeScalars, loadProgress]
+    [refreshChallengeScalars]
   );
 
   const loadFullChallenges = useCallback(async () => {
@@ -695,7 +717,6 @@ export default function TrackerPanel({
 
   const reloadAllProgress = useCallback(async () => {
     setBusyReload(true);
-    setSliderPreview({});
     try {
       await loadMatch();
       await loadFullChallenges();
@@ -722,7 +743,12 @@ export default function TrackerPanel({
       .channel("tracker-realtime")
       .on(
         "postgres_changes",
-        { event: "*", schema: "public", table: "challenges" },
+        {
+          event: "*",
+          schema: "public",
+          table: "challenges",
+          ...(weekFilter ? { filter: weekFilter } : {}),
+        },
         (payload) => {
           const eventType = payload.eventType as "INSERT" | "UPDATE" | "DELETE";
           if (eventType === "INSERT") {
@@ -787,7 +813,7 @@ export default function TrackerPanel({
       supabase.removeChannel(channel);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [weekIds.join(",")]);
+  }, [weekIds.join(","), weekFilter]);
 
   useEffect(() => {
     if (trackerView !== "track") return;
@@ -879,6 +905,14 @@ export default function TrackerPanel({
     [challenges, lockedIds, prestigeLockedIds, hasWeekFilter, selectedWeekIdSet]
   );
 
+  const effectsByObjectId = useMemo(() => {
+    const map = new Map<string, EffectRow>();
+    for (const e of effects) {
+      if (e.object?.id) map.set(e.object.id, e);
+    }
+    return map;
+  }, [effects]);
+
   // Categorías del panel global: reglas pendientes de las semanas seleccionadas,
   // aplanadas para el filtrado cruzado. Cuando un desafío se completa, sus
   // opciones y condiciones desaparecen solas.
@@ -962,12 +996,11 @@ export default function TrackerPanel({
 
         // consumibles con efecto automático (manzana/seta): registrar en «usar».
         // Bidón de plasma y jugo de sorbete van en «ganar» con cantidad parcial.
-        const consumable = effects.find(
-          (e) =>
-            e.effect_action === code &&
-            e.object &&
-            r.required_object?.id === e.object.id
-        );
+        const consumableRaw = r.required_object?.id
+          ? effectsByObjectId.get(r.required_object.id)
+          : undefined;
+        const consumable =
+          consumableRaw?.effect_action === code ? consumableRaw : undefined;
         const directGain =
           consumable?.object?.code === "chug_jug" ||
           consumable?.object?.code === "slurp_juice";
@@ -1061,7 +1094,7 @@ export default function TrackerPanel({
     lockedIds,
     prestigeLockedIds,
     actionTypes,
-    effects,
+    effectsByObjectId,
     ruleProgressIndex,
     distinctProgressIndex,
     activeMatch,
@@ -1162,7 +1195,6 @@ export default function TrackerPanel({
       if (res.updated?.length) {
         setChallenges((prev) => patchChallengesFromReport(prev, res.updated!));
       }
-      await loadProgress();
       await emitLog(
         globalSection(cat.actionCode),
         cat.actionCode,
@@ -1229,7 +1261,6 @@ export default function TrackerPanel({
     if (winRes?.updated?.length) {
       setChallenges((prev) => patchChallengesFromReport(prev, winRes.updated!));
     }
-    await loadProgress();
     const { error: endErr } = await supabase.rpc("end_active_match");
     setBusyMatch(false);
     if (endErr) alert(endErr.message);
@@ -1284,7 +1315,7 @@ export default function TrackerPanel({
 
     if (error) alert(error.message);
     else {
-      await loadProgress();
+      loadProgressDebouncedRef.current();
       await emitLog(WEEK_SECTION, null, {
         message: `🔄 Progreso reiniciado: ${challenge.description}`,
         action: {
@@ -1505,13 +1536,6 @@ export default function TrackerPanel({
     const target = challenge.target_value ?? 1;
     const clamped = Math.max(0, Math.min(newValue, target));
 
-    setSliderPreview((prev) => {
-      if (prev[challenge.id] === undefined) return prev;
-      const next = { ...prev };
-      delete next[challenge.id];
-      return next;
-    });
-
     setChallenges((prev) =>
       prev.map((c) =>
         c.id === challenge.id
@@ -1644,6 +1668,7 @@ export default function TrackerPanel({
           WebkitBackdropFilter: "blur(2px)",
         }),
   };
+  const cardClassName = panelClassName;
   const button: React.CSSProperties = {
     ...yellowButton,
     padding: `${fs(9, 14)} ${fs(14, 24)}`,
@@ -1794,10 +1819,14 @@ export default function TrackerPanel({
           busy: busyReload,
           onReload: () => void reloadAllProgress(),
         }}
-        prestigeToggle={{
-          active: prestigeView,
-          onToggle: togglePrestigeView,
-        }}
+        prestigeToggle={
+          hasPrestige
+            ? {
+                active: prestigeView,
+                onToggle: togglePrestigeView,
+              }
+            : undefined
+        }
       />
 
       {/* Título */}
@@ -1892,6 +1921,7 @@ export default function TrackerPanel({
           return (
             <section
               key={cat.actionCode}
+              className={cardClassName}
               style={{ ...card, display: "grid", gap: 12, alignContent: "start" }}
             >
               <div
@@ -2151,7 +2181,7 @@ export default function TrackerPanel({
           );
         })}
         {categories.length === 0 && (
-          <section style={card}>
+          <section className={cardClassName} style={card}>
             <p style={{ margin: 0 }}>
               {!hasWeekFilter
                 ? "Selecciona una o más semanas arriba para ver las acciones rápidas."
@@ -2218,6 +2248,7 @@ export default function TrackerPanel({
             flush
           />
           <div
+            className={panelClassName}
             style={{
               ...panel,
               borderRadius: 0,
@@ -2284,26 +2315,21 @@ export default function TrackerPanel({
             const showLocHint =
               !!singleLocLabel && !showOptionChips && !c.is_completed;
 
-            const sliderLive = sliderPreview[c.id];
-            const displayCurrent =
-              ctrl.showSlider && sliderLive !== undefined ? sliderLive : current;
-            const displayCompleted =
-              ctrl.showSlider && sliderLive !== undefined
-                ? sliderLive >= target
-                : c.is_completed;
-
             return (
-              <MissionRow
+              <MissionProgressDisplay
                 key={c.id}
                 quest={c.description}
-                current={displayCurrent}
+                current={current}
                 target={target}
-                completed={displayCompleted}
+                completed={c.is_completed}
                 locked={locked}
                 accent={accent}
                 first={!weekMeta && i === 0}
                 visual={getMissionVisual(c)}
+                showSlider={ctrl.showSlider}
               >
+                {(preview) => (
+                  <>
                 {showLocHint && !landKind && (
                   <p
                     style={{
@@ -2481,11 +2507,12 @@ export default function TrackerPanel({
                       current={current}
                       target={target}
                       locked={locked}
-                      accent={displayCompleted ? "#22c55e" : "#3b82f6"}
-                      onPreview={(v) =>
-                        setSliderPreview((prev) => ({ ...prev, [c.id]: v }))
-                      }
-                      onCommit={(v) => void setProgress(c, v)}
+                      accent={c.is_completed ? "#22c55e" : "#3b82f6"}
+                      onPreview={preview.onPreview}
+                      onCommit={(v) => {
+                        preview.clearPreview();
+                        void setProgress(c, v);
+                      }}
                     />
                     )}
                     <div style={{ display: "flex", gap: 10, alignItems: "center", flexWrap: "wrap" }}>
@@ -2642,7 +2669,9 @@ export default function TrackerPanel({
                     </div>
                   </div>
                 )}
-              </MissionRow>
+                  </>
+                )}
+              </MissionProgressDisplay>
             );
           })}
           {!weekMeta && items.length === 0 && (

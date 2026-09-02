@@ -1,11 +1,11 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { createClient } from "@/utils/supabase/client";
 import LogoutButton from "../components/LogoutButton";
 import PageBackground from "../components/PageBackground";
 import TopNav from "../components/TopNav";
-import { contentWrap, fnt, fs, pageMain, panel, titleFont, yellowButton } from "../lib/theme";
+import { contentWrap, fnt, fs, pageMain, panel, pillTab, titleFont, yellowButton } from "../lib/theme";
 
 type Row = {
   id: string;
@@ -17,6 +17,19 @@ type Row = {
 
 type Challenge = Row & {
   kind?: "simple" | "progress";
+  week_id?: string | null;
+  line_id?: string | null;
+  is_meta?: boolean;
+  is_prestige?: boolean;
+};
+
+type SeasonRow = Row & {
+  is_locked?: boolean;
+};
+
+type WeekRow = Row & {
+  week_number: number;
+  season_id: string;
 };
 
 type GameObject = Row & {
@@ -176,6 +189,8 @@ export default function AdminPanel({
   locations,
   challenges,
   challengeLines,
+  seasons,
+  weeks,
   phoneLinks,
 }: {
   actionTypes: Row[];
@@ -184,12 +199,58 @@ export default function AdminPanel({
   locations: Row[];
   challenges: Challenge[];
   challengeLines: Row[];
+  seasons: SeasonRow[];
+  weeks: WeekRow[];
   phoneLinks: { durr: string | null; pizza: string | null };
 }) {
   const supabase = createClient();
   const [message, setMessage] = useState("");
   const [challengeKind, setChallengeKind] =
   useState<"simple" | "progress">("simple");
+
+  const defaultSeason =
+    seasons.find((s) => s.code === "season_9" && !s.is_locked)?.code ??
+    seasons.find((s) => !s.is_locked)?.code ??
+    seasons[0]?.code ??
+    "";
+  const [seasonCode, setSeasonCode] = useState(defaultSeason);
+
+  const selectedSeason = seasons.find((s) => s.code === seasonCode);
+  const seasonWeeks = useMemo(
+    () =>
+      weeks
+        .filter((w) => w.season_id === selectedSeason?.id)
+        .sort((a, b) => a.week_number - b.week_number),
+    [weeks, selectedSeason?.id]
+  );
+  const seasonWeekIds = useMemo(
+    () => new Set(seasonWeeks.map((w) => w.id)),
+    [seasonWeeks]
+  );
+  const seasonChallenges = useMemo(
+    () =>
+      challenges.filter(
+        (c) =>
+          c.week_id &&
+          seasonWeekIds.has(c.week_id) &&
+          !c.is_meta &&
+          !c.is_prestige
+      ),
+    [challenges, seasonWeekIds]
+  );
+  const seasonLineIds = useMemo(
+    () =>
+      new Set(
+        seasonChallenges
+          .map((c) => c.line_id)
+          .filter(Boolean) as string[]
+      ),
+    [seasonChallenges]
+  );
+  const seasonChallengeLines = useMemo(
+    () => challengeLines.filter((l) => seasonLineIds.has(l.id)),
+    [challengeLines, seasonLineIds]
+  );
 
   async function registerUser(formData: FormData) {
     const res = await fetch("/api/admin/create-user", {
@@ -269,10 +330,15 @@ export default function AdminPanel({
     const kind = String(formData.get("kind"));
     const lineId = String(formData.get("line_id"));
     const phaseOrder = String(formData.get("phase_order"));
+    const weekId = String(formData.get("week_id"));
     const rulesOperator =
       kind === "progress"
         ? String(formData.get("rules_operator"))
         : null;
+    if (!weekId) {
+      setMessage("Selecciona una semana de la temporada.");
+      return;
+    }
     const { error } = await supabase.from("challenges").insert({
       description: String(formData.get("description")),
       kind,
@@ -284,6 +350,7 @@ export default function AdminPanel({
       line_id: lineId || null,
       phase_order: lineId && phaseOrder ? Number(phaseOrder) : null,
       match_scope: String(formData.get("match_scope")),
+      week_id: weekId,
     });
     
     if (error) setMessage(error.message);
@@ -427,6 +494,46 @@ export default function AdminPanel({
         </p>
       )}
 
+      <section
+        style={{
+          ...panel,
+          marginTop: 16,
+          marginBottom: 8,
+          padding: fs(14, 20),
+        }}
+      >
+        <h2
+          style={{
+            fontFamily: titleFont,
+            fontSize: fs(15, 20),
+            margin: "0 0 10px",
+            textTransform: "uppercase",
+          }}
+        >
+          Temporada activa en admin
+        </h2>
+        <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+          {seasons.map((season) => (
+            <button
+              key={season.id}
+              type="button"
+              onClick={() => setSeasonCode(season.code ?? "")}
+              style={{
+                ...pillTab(season.code === seasonCode),
+                opacity: season.is_locked ? 0.55 : 1,
+              }}
+            >
+              {season.display_name}
+              {season.is_locked ? " 🔒" : ""}
+            </button>
+          ))}
+        </div>
+        <p style={{ margin: "10px 0 0", color: fnt.textDim, fontSize: fs(12, 14) }}>
+          Los desafíos y reglas se filtran por la temporada seleccionada (
+          {seasonChallenges.length} desafíos en {selectedSeason?.display_name ?? "—"}).
+        </p>
+      </section>
+
       <div style={grid}>
         <section style={card}>
           <h2>Registrar usuario</h2>
@@ -459,9 +566,18 @@ export default function AdminPanel({
         </section>
 
         <section style={card}>
-          <h2>Crear challenge</h2>
+          <h2>Crear challenge ({selectedSeason?.display_name})</h2>
 
           <form action={createChallenge} style={form}>
+            <select name="week_id" required style={input}>
+              <option value="">Semana de la temporada</option>
+              {seasonWeeks.map((week) => (
+                <option key={week.id} value={week.id}>
+                  Semana {week.week_number}
+                </option>
+              ))}
+            </select>
+
             <input
               name="description"
               placeholder="Descripción del challenge"
@@ -500,7 +616,7 @@ export default function AdminPanel({
 
             <select name="line_id" style={input}>
               <option value="">Sin línea / independiente</option>
-              {challengeLines.map((line, index) => (
+              {seasonChallengeLines.map((line, index) => (
                 <option key={line.id} value={line.id}>
                   Línea #{index + 1} — {line.id.slice(0, 8)}
                 </option>
@@ -532,12 +648,12 @@ export default function AdminPanel({
         </section>
 
         <section style={card}>
-          <h2>Crear rule</h2>
+          <h2>Crear rule ({selectedSeason?.display_name})</h2>
 
           <form action={createRule} style={form}>
             <select name="challenge_id" required style={input}>
               <option value="">Seleccionar challenge</option>
-              {challenges.map((c) => (
+              {seasonChallenges.map((c) => (
                 <option key={c.id} value={c.id}>
                   {c.description}
                 </option>

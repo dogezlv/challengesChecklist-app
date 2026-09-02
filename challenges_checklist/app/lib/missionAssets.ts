@@ -49,30 +49,34 @@ function ruleLocationCode(c: Challenge): string | null {
   return r?.location?.code ?? null;
 }
 
+const visualCache = new WeakMap<Challenge, MissionVisual | null>();
+
 /** Visual de referencia (pantalla de carga o mapa) para una misión concreta. */
 export function getMissionVisual(c: Challenge): MissionVisual | null {
+  if (visualCache.has(c)) return visualCache.get(c)!;
+
   const desc = c.description.toLowerCase();
   const loc = ruleLocationCode(c);
+  let result: MissionVisual | null = null;
 
   if (desc.includes("lupa") && desc.includes("pantalla de carga")) {
-    return { ...MISSION_VISUALS.lupa_loading, buttonLabel: "Pantalla de carga" };
-  }
-  if (desc.includes("cuchillo") && desc.includes("pantalla de carga")) {
-    return { ...MISSION_VISUALS.cuchillo_loading, buttonLabel: "Pantalla de carga" };
-  }
-  if (
+    result = { ...MISSION_VISUALS.lupa_loading, buttonLabel: "Pantalla de carga" };
+  } else if (desc.includes("cuchillo") && desc.includes("pantalla de carga")) {
+    result = { ...MISSION_VISUALS.cuchillo_loading, buttonLabel: "Pantalla de carga" };
+  } else if (
     loc === "treasure_map_1_arctic_airport" ||
     (desc.includes("palmeras paradisíacas") && desc.includes("mapa del tesoro"))
   ) {
-    return { ...MISSION_VISUALS.map_paradise, buttonLabel: "Mapa del tesoro" };
-  }
-  if (
+    result = { ...MISSION_VISUALS.map_paradise, buttonLabel: "Mapa del tesoro" };
+  } else if (
     loc === "treasure_map_2_forknife" ||
     (desc.includes("cruce chatarra") && desc.includes("mapa del tesoro"))
   ) {
-    return { ...MISSION_VISUALS.map_junk, buttonLabel: "Mapa del tesoro" };
+    result = { ...MISSION_VISUALS.map_junk, buttonLabel: "Mapa del tesoro" };
   }
-  return null;
+
+  visualCache.set(c, result);
+  return result;
 }
 
 export function visualButtonIcon(visual: MissionVisual): string {

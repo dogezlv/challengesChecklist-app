@@ -6,18 +6,8 @@ import { useState } from "react";
 // en vez de intentar una imagen que daría 404 (y caer al emoji genérico).
 const EMOJI_BY_CODE: Record<string, string> = {
   misc: "🎲",
-  cactus: "🌵",
-  jigsaw_piece: "🧩",
-  treasure_signpost: "🪧",
-  big_telephone: "📞",
-  hot_spring: "♨️",
-  dinosaur: "🦖",
-  ice_sculpture: "🧊",
-  wooden_rabbit: "🐇",
   stone_pig: "🐷",
-  metal_llama: "🦙",
-  giant_face: "🗿",
-  pirate_flag: "🏴‍☠️",
+  big_telephone: "📞",
 };
 
 // Imagen de public/icons/<code>.png con fallback a emoji si no existe.

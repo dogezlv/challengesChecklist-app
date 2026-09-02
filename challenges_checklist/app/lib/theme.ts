@@ -112,6 +112,9 @@ export const panel: CSSProperties = {
   WebkitBackdropFilter: "blur(2px)",
 };
 
+/** Clase para desactivar blur vía CSS en modo ligero (`html[data-lite="on"]`). */
+export const panelClassName = "fn-themed-panel";
+
 // Banner ancho del Battle Pass (etiqueta pequeña + título grande + % a la derecha).
 export const banner: CSSProperties = {
   position: "relative",
