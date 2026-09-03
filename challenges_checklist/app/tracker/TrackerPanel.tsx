@@ -15,6 +15,7 @@ import SearchBox from "../components/SearchBox";
 import IncompleteOnlyToggle from "../components/IncompleteOnlyToggle";
 import WeekTabs from "../components/WeekTabs";
 import BattlePassBanner from "../components/BattlePassBanner";
+import SeasonProgressBar from "../components/SeasonProgressBar";
 import TopNav from "../components/TopNav";
 import TrackerLogsPanel from "../components/TrackerLogsPanel";
 import {
@@ -572,6 +573,14 @@ export default function TrackerPanel({
   );
   const seasonLabel =
     seasons.find((s) => s.code === seasonCode)?.display_name ?? seasonCode;
+
+  const seasonProgress = useMemo(() => {
+    const rows = challenges.filter((c) => !c.is_meta);
+    return {
+      done: rows.filter((c) => c.is_completed).length,
+      total: rows.length,
+    };
+  }, [challenges]);
 
   const selectedWeekIdSet = useMemo(() => {
     return new Set(
@@ -1864,7 +1873,7 @@ export default function TrackerPanel({
       </header>
 
       {trackerView === "track" && (
-        <div style={{ marginBottom: 20 }}>
+        <div style={{ marginBottom: 20, display: "grid", gap: 12 }}>
           <WeekTabs
             multiSelect
             seasons={seasons}
@@ -1875,6 +1884,11 @@ export default function TrackerPanel({
             onSelectAllWeeks={selectAllWeeks}
             onSelectNoneWeeks={selectNoWeeks}
             onSelectSeason={(code) => router.push(`/tracker?season=${code}`)}
+          />
+          <SeasonProgressBar
+            done={seasonProgress.done}
+            total={seasonProgress.total}
+            seasonLabel={seasonLabel}
           />
         </div>
       )}
