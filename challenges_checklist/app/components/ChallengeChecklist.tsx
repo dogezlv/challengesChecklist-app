@@ -10,6 +10,7 @@ import IncompleteOnlyToggle from "./IncompleteOnlyToggle";
 import PrestigeViewToggle from "./PrestigeViewToggle";
 import WeekTabs from "./WeekTabs";
 import BattlePassBanner from "./BattlePassBanner";
+import SeasonProgressBar from "./SeasonProgressBar";
 import { fnt, fs, panel, panelClassName, weekAccent } from "../lib/theme";
 import type { Season, Week } from "../lib/selection";
 import {
@@ -194,6 +195,15 @@ export default function ChallengeChecklist({
     return out;
   }, [weeks, challengesByWeek]);
 
+  const seasonProgress = useMemo(() => {
+    const rows = challenges.filter((c) => !c.is_meta);
+    const done = rows.filter((c) => c.is_completed).length;
+    return { done, total: rows.length };
+  }, [challenges]);
+
+  const seasonLabel =
+    seasons.find((s) => s.code === seasonCode)?.display_name ?? seasonCode;
+
   const visibleByWeek = useMemo(() => {
     const out = new Map<
       string,
@@ -273,6 +283,12 @@ export default function ChallengeChecklist({
         onSelectAll={onSelectAll}
         onSelectSeason={onSelectSeason}
         onSelectWeek={onSelectWeek}
+      />
+
+      <SeasonProgressBar
+        done={seasonProgress.done}
+        total={seasonProgress.total}
+        seasonLabel={seasonLabel}
       />
 
       <div
